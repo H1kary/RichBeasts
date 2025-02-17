@@ -11,6 +11,9 @@ const sequelize = new Sequelize({
 // Модель пользователя
 const User = sequelize.define('User', {
   id: { type: DataTypes.INTEGER, primaryKey: true },
+  username: { type: DataTypes.STRING },
+  firstName: { type: DataTypes.STRING },
+  lastName: { type: DataTypes.STRING },
   eggs: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0.0 },
   money: { type: DataTypes.DECIMAL(10, 2), defaultValue: 50.0 },
   lastCollection: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
@@ -68,15 +71,26 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 const gameKeyboard = Markup.keyboard([
   ['👤 Профиль', '🛒 Купить животное'],
   ['🥚 Собрать яйца', '💰 Продать яйца'],
-  ['❓ Помощь']
+  ['🏆 Лидеры', '❓ Помощь']
 ]).resize();
 
 // Регистрация пользователя при первом использовании
 bot.use(async (ctx, next) => {
   const user = await User.findOrCreate({
     where: { id: ctx.from.id },
-    defaults: { id: ctx.from.id }
+    defaults: { 
+      id: ctx.from.id,
+      username: ctx.from.username,
+      firstName: ctx.from.first_name,
+      lastName: ctx.from.last_name 
+    }
   });
+  await User.update({
+    username: ctx.from.username,
+    firstName: ctx.from.first_name,
+    lastName: ctx.from.last_name
+  }, { where: { id: ctx.from.id } });
+  
   ctx.user = user[0];
   console.log(`Пользователь ${ctx.from.id} (${ctx.from.username}): ${user[1] ? 'создан' : 'найден'}`);
   return next();
@@ -158,6 +172,40 @@ bot.hears('🥚 Собрать яйца', async (ctx) => {
 
 bot.hears('💰 Продать яйца', async (ctx) => {
   ctx.reply('Напишите "/sell_eggs количество" чтобы продать яйца', gameKeyboard);
+});
+
+bot.hears('🏆 Лидеры', async (ctx) => {
+  try {
+    // Получаем всех пользователей, отсортированных по деньгам
+    const allUsers = await User.findAll({
+      order: [['money', 'DESC']],
+      attributes: ['id', 'money', 'username', 'firstName', 'lastName']
+    });
+
+    // Находим позицию текущего пользователя
+    const userId = ctx.from.id;
+    const userIndex = allUsers.findIndex(u => u.id === userId);
+    const userPosition = userIndex >= 0 ? userIndex + 1 : 'Не в топе';
+
+    // Формируем топ-10
+    const top10 = allUsers.slice(0, 10).map((u, index) => {
+      let name = u.username 
+        ? `@${u.username}` 
+        : [u.firstName, u.lastName].filter(Boolean).join(' ') 
+          || `ID: ${u.id}`;
+      
+      return `${index + 1}. ${u.id === userId ? '👉 ' : ''}${name} - ${u.money.toFixed(2)}💰`;
+    }).join('\n');
+
+    ctx.replyWithMarkdown(
+      `*🏆 Топ-10 фермеров:*\n\n${top10}\n\n` +
+      `*Ваша позиция:* ${userPosition}\n` +
+      `*Ваш баланс:* ${ctx.user.money.toFixed(2)}💰`
+    );
+  } catch (error) {
+    console.error('Ошибка получения лидеров:', error);
+    ctx.reply('⚠️ Не удалось загрузить таблицу лидеров');
+  }
 });
 
 bot.hears('❓ Помощь', (ctx) => {
