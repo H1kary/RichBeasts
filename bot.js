@@ -2,10 +2,11 @@ require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const { Sequelize, DataTypes } = require('sequelize');
 
-// Инициализация БД
+// Настройка Sequelize для отключения логов SQL
 const sequelize = new Sequelize({
   dialect: 'sqlite',
   storage: 'database.sqlite',
+  logging: false // Отключаем логирование SQL
 });
 
 // Модель пользователя
@@ -71,7 +72,7 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 const gameKeyboard = Markup.keyboard([
   ['👤 Профиль', '🛒 Купить животное'],
   ['🥚 Собрать яйца', '💰 Продать яйца'],
-  ['🏆 Лидеры', '❓ Помощь']
+  ['🔍 Дополнительно']
 ]).resize();
 
 // Инициализация сессии должна быть первой
@@ -95,6 +96,12 @@ bot.use(async (ctx, next) => {
       lastName: ctx.from.last_name 
     }
   });
+  
+  // Логирование только при создании нового пользователя
+  if (user[1]) {
+    console.log(`[NEW USER] ID: ${ctx.from.id} (@${ctx.from.username || 'no_username'})`);
+  }
+  
   await User.update({
     username: ctx.from.username,
     firstName: ctx.from.first_name,
@@ -102,20 +109,20 @@ bot.use(async (ctx, next) => {
   }, { where: { id: ctx.from.id } });
   
   ctx.user = user[0];
-  console.log(`Пользователь ${ctx.from.id} (${ctx.from.username}): ${user[1] ? 'создан' : 'найден'}`);
   return next();
 });
 
 // Команды бота
-bot.start((ctx) => 
+bot.start((ctx) => {
+  console.log(`[START] User ${ctx.from.id} (@${ctx.from.username || 'no_username'})`);
   ctx.replyWithMarkdown(
     `🎮 *Добро пожаловать на ферму!*\nНачальный капитал: ${ctx.user.money.toFixed(2)}💰`, 
     gameKeyboard
   )
-);
+});
 
 bot.hears('👤 Профиль', async (ctx) => {
-  console.log(`Просмотр профиля: ${ctx.from.id}`);
+  console.log(`[PROFILE] User ${ctx.from.id} (@${ctx.from.username || 'no_username'})`);
   const user = ctx.user;
   const list = Object.entries(ANIMALS)
     .map(([id, animal]) => {
@@ -135,6 +142,7 @@ bot.hears('👤 Профиль', async (ctx) => {
 });
 
 bot.hears('🛒 Купить животное', async (ctx) => {
+  console.log(`[SHOP] User ${ctx.from.id} (@${ctx.from.username || 'no_username'})`);
   const sortedAnimals = Object.entries(ANIMALS).sort((a, b) => a[1].price - b[1].price);
   const buttons = sortedAnimals.map(([id, data]) => 
     Markup.button.callback(
@@ -142,10 +150,14 @@ bot.hears('🛒 Купить животное', async (ctx) => {
       `buy_${id}`
     )
   );
-  ctx.reply('Выберите животное:', Markup.inlineKeyboard(buttons, { columns: 2 }));
+  ctx.replyWithMarkdown(
+    `*🛒 Магазин животных*\nВаш баланс: ${ctx.user.money.toFixed(2)}💰\nВыберите животное:`,
+    Markup.inlineKeyboard(buttons, { columns: 2 })
+  );
 });
 
 bot.hears('🥚 Собрать яйца', async (ctx) => {
+  console.log(`[COLLECT] User ${ctx.from.id} (@${ctx.from.username || 'no_username'})`);
   const now = new Date();
   const last = new Date(ctx.user.lastCollection);
   const minutes = Math.max(0, Math.floor((now - last) / 60000));
@@ -175,43 +187,45 @@ bot.hears('🥚 Собрать яйца', async (ctx) => {
   console.log(`Сбор яиц: ${ctx.from.id} собрал ${totalEggs.toFixed(2)} яиц`);
   ctx.replyWithMarkdown(
     `🥚 *Собрано яиц:* ${totalEggs.toFixed(2)}\n` +
-    `💰 *Текущий баланс яиц:* ${ctx.user.eggs.toFixed(2)}\n` +
-    `⏱ *Следующий сбор через:* 1 минуту`,
+    `💰 *Текущее количество яиц:* ${ctx.user.eggs.toFixed(2)}\n`,
     gameKeyboard
   );
 });
 
 bot.hears('💰 Продать яйца', async (ctx) => {
-  ctx.reply('Напишите "/sell_eggs количество" чтобы продать яйца', gameKeyboard);
+  console.log(`[SELL] User ${ctx.from.id} (@${ctx.from.username || 'no_username'})`);
+  ctx.replyWithMarkdown(
+    `💰 *Продажа яиц*\n` +
+    `Ваш баланс: ${ctx.user.eggs.toFixed(2)}🥚\n` +
+    `Напишите "/sell_eggs количество" чтобы продать яйца`,
+    gameKeyboard
+  );
 });
 
-bot.hears('🏆 Лидеры', async (ctx) => {
+// Выносим логику лидеров в отдельную функцию
+const handleLeaders = async (ctx) => {
   try {
-    // Получаем всех пользователей, отсортированных по деньгам
     const allUsers = await User.findAll({
       order: [['money', 'DESC']],
       attributes: ['id', 'money', 'username', 'firstName', 'lastName']
     });
 
-    // Находим позицию текущего пользователя
     const userId = ctx.from.id;
     const userIndex = allUsers.findIndex(u => u.id === userId);
     const userPosition = userIndex >= 0 ? userIndex + 1 : 'Не в топе';
 
-    // Формируем топ-10
     const top10 = allUsers.slice(0, 10).map((u, index) => {
       let name = u.username 
         ? `@${u.username}` 
         : [u.firstName, u.lastName].filter(Boolean).join(' ') 
           || `ID: ${u.id}`;
       
-      // Экранируем специальные символы
       name = name.replace(/([_*[\]()~`>#+=\-|{}.!])/g, '\\$1');
       
       return `${index + 1}. ${u.id === userId ? '👉 ' : ''}${name} - ${u.money.toFixed(2)}💰`;
     }).join('\n');
 
-    ctx.replyWithMarkdown(
+    await ctx.replyWithMarkdown(
       `*🏆 Топ-10 фермеров:*\n\n${top10}\n\n` +
       `*Ваша позиция:* ${userPosition}\n` +
       `*Ваш баланс:* ${ctx.user.money.toFixed(2)}💰`,
@@ -221,17 +235,25 @@ bot.hears('🏆 Лидеры', async (ctx) => {
     console.error('Ошибка получения лидеров:', error);
     ctx.reply('⚠️ Не удалось загрузить таблицу лидеров');
   }
+};
+
+// Обновляем обработчики
+bot.hears('🏆 Лидеры', handleLeaders);
+bot.action('show_leaders', async (ctx) => {
+  console.log(`[LEADERS] User ${ctx.from.id} запросил таблицу лидеров`);
+  await ctx.deleteMessage();
+  await handleLeaders(ctx);
 });
 
-bot.hears('❓ Помощь', (ctx) => {
-  console.log(`Запрос помощи: ${ctx.from.id}`);
+// Выносим логику помощи в отдельную функцию
+const handleHelp = (ctx) => {
   const animalsInfo = Object.entries(ANIMALS)
     .map(([_, data]) => 
       `▫️ <b>${data.name}</b> - ${data.description}\n   Цена: ${data.price}💰`
     )
     .join('\n');
   
-  ctx.reply(
+  return ctx.reply(
     `<b>🐔 Ферма помощи</b>\n\n` +
     `<b>Экономика:</b>\n` +
     `🥚 1 яйцо = 0.5💰\n\n` +
@@ -246,9 +268,19 @@ bot.hears('❓ Помощь', (ctx) => {
       reply_markup: gameKeyboard.reply_markup 
     }
   );
+};
+
+// Обновляем обработчики
+bot.hears('❓ Помощь', handleHelp);
+
+bot.action('show_help', async (ctx) => {
+  console.log(`[HELP] User ${ctx.from.id} запросил справку`);
+  await ctx.deleteMessage();
+  await handleHelp(ctx);
 });
 
 bot.command('trade', async (ctx) => {
+  console.log(`[TRADE_ATTEMPT] User ${ctx.from.id} пытается передать деньги`);
   const [targetUsername, amountStr] = ctx.message.text.split(' ').slice(1);
   
   // Проверка аргументов
@@ -307,8 +339,10 @@ bot.command('trade', async (ctx) => {
       { parse_mode: 'Markdown' }
     );
 
+    console.log(`[TRADE_SUCCESS] User ${ctx.from.id} передал ${amount}💰 пользователю ${receiver.id}`);
+
   } catch (error) {
-    console.error('Ошибка перевода:', error);
+    console.error(`[TRADE_FAIL] User ${ctx.from.id}: ${error.message}`);
     ctx.reply('❌ Произошла ошибка при выполнении перевода');
   }
 });
@@ -337,6 +371,7 @@ User.afterFind(user => {
 
 // Команда добавления денег
 bot.command('add_money', async (ctx) => {
+  console.log(`[ADMIN] add_money by ${ctx.from.id} (@${ctx.from.username || 'no_username'})`);
   if (!isAdmin(ctx)) return;
   
   const [userId, amount] = ctx.message.text.split(' ').slice(1);
@@ -497,7 +532,6 @@ bot.command('sell_eggs', async (ctx) => {
   await user.save();
   
   ctx.reply(`✅ Вы продали ${eggsToSell} яиц за ${moneyEarned.toFixed(2)}💰`);
-  ctx.telegram.sendMessage(ctx.chat.id, `Вы продали ${eggsToSell} яиц за ${moneyEarned.toFixed(2)}💰`);
 });
 
 // Исправляем обработчик выбора животного
@@ -554,18 +588,32 @@ bot.action(/^buy:(\w+):(\d+)$/, async (ctx) => {
   ctx.answerCbQuery();
 });
 
-// Запуск
-(async () => {
-  await sequelize.sync({ alter: true });
-  bot.launch();
-  console.log('Бот-ферма запущена!');
-})();
+// Добавляем обработчик кнопки "Дополнительно"
+bot.hears('🔍 Дополнительно', (ctx) => {
+  console.log(`[MENU] User ${ctx.from.id} открыл дополнительные функции`);
+  ctx.reply(
+    '📂 Дополнительные функции:',
+    Markup.inlineKeyboard([
+      Markup.button.callback('🏆 Лидеры', 'show_leaders'),
+      Markup.button.callback('❓ Помощь', 'show_help'),
+      Markup.button.callback('🔄 Обмен', 'show_trade_help')
+    ], { columns: 2 })
+  );
+});
 
-process.once('SIGINT', () => {
-  sequelize.close();
-  bot.stop('SIGINT');
+bot.action('show_trade_help', async (ctx) => {
+  console.log(`[TRADE_HELP] User ${ctx.from.id} запросил помощь по обмену`);
+  await ctx.deleteMessage();
+  ctx.replyWithMarkdown(
+    `*🔄 Система обмена*\n` +
+    `Ваш баланс: ${ctx.user.money.toFixed(2)}💰\n\n` +
+    `Для передачи денег другому игроку:\n` +
+    `Напишите команду */trade @имя_игрока сумма*\n` +
+    `\n` +
+    `Например: */trade @username 500*\n\n` +
+    `⚠️ *Ограничения:*\n` +
+    `- Минимальная сумма: 1💰\n`
+  );
 });
-process.once('SIGTERM', () => {
-  sequelize.close();
-  bot.stop('SIGTERM');
-});
+
+bot.launch();
