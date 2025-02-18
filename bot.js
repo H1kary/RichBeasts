@@ -235,12 +235,18 @@ bot.hears('❓ Помощь', (ctx) => {
 
 bot.command('sell_eggs', async (ctx) => {
   const [amount] = ctx.message.text.split(' ').slice(1);
+  
+  if (!amount) {
+    return ctx.reply('❌ Укажите количество яиц для продажи\nПример: /sell_eggs 10');
+  }
+  
   const cleanAmount = amount.replace(',', '.');
   const eggsToSell = parseFloat(cleanAmount) || 0;
   
-  console.log(`Попытка продажи: ${eggsToSell} яиц (оригинальный ввод: ${amount})`);
+  if (eggsToSell <= 0) {
+    return ctx.reply('❌ Укажите положительное число больше нуля\nПример: /sell_eggs 10');
+  }
   
-  if (eggsToSell <= 0) return ctx.reply('Укажите корректное количество');
   if (ctx.user.eggs < eggsToSell) return ctx.reply(`Недостаточно яиц. У вас только ${ctx.user.eggs.toFixed(2)}🥚`);
 
   const oldEggs = ctx.user.eggs;
