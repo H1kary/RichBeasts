@@ -15,7 +15,7 @@ const User = sequelize.define('User', {
   firstName: { type: DataTypes.STRING },
   lastName: { type: DataTypes.STRING },
   eggs: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0.0 },
-  money: { type: DataTypes.DECIMAL(10, 2), defaultValue: 50.0 },
+  money: { type: DataTypes.DECIMAL(10, 2), defaultValue: 100.0 },
   lastCollection: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
   chicken_count: { type: DataTypes.INTEGER, defaultValue: 0 },
   duck_count: { type: DataTypes.INTEGER, defaultValue: 0 },
@@ -25,43 +25,43 @@ const User = sequelize.define('User', {
   sheep_count: { type: DataTypes.INTEGER, defaultValue: 0 }
 });
 
-// Обновляем конфиг животных
+// Новый конфиг животных (отсортирован по стоимости)
 const ANIMALS = {
   chicken: {
     name: '🐔 Курица',
-    price: 50,
-    eggsPerMinute: 0.1,
-    description: '6 яиц/час'
+    price: 100,
+    eggsPerMinute: 1,
+    description: '1 яйцо/мин'
   },
   duck: {
     name: '🦆 Утка',
-    price: 100, 
-    eggsPerMinute: 0.3,
-    description: '18 яиц/час'
+    price: 500,
+    eggsPerMinute: 6.5,
+    description: '6.5 яиц/мин'
   },
   goose: {
     name: '🦢 Гусь',
-    price: 200,
-    eggsPerMinute: 0.5,
-    description: '30 яиц/час'
-  },
-  cow: {
-    name: '🐄 Корова',
-    price: 500,
-    eggsPerMinute: 1,
-    description: '60 яиц/час'
-  },
-  pig: {
-    name: '🐖 Свинья',
-    price: 1000,
-    eggsPerMinute: 2,
-    description: '120 яиц/час'
+    price: 2000,
+    eggsPerMinute: 30,
+    description: '30 яиц/мин'
   },
   sheep: {
     name: '🐑 Овца',
-    price: 300,
-    eggsPerMinute: 0.7,
-    description: '42 яйца/час'
+    price: 5000,
+    eggsPerMinute: 100,
+    description: '100 яиц/мин'
+  },
+  cow: {
+    name: '🐄 Корова',
+    price: 25000,
+    eggsPerMinute: 650,
+    description: '650 яиц/мин'
+  },
+  pig: {
+    name: '🐖 Свинья',
+    price: 100000,
+    eggsPerMinute: 3000,
+    description: '3000 яиц/мин'
   }
 };
 
@@ -73,6 +73,10 @@ const gameKeyboard = Markup.keyboard([
   ['🥚 Собрать яйца', '💰 Продать яйца'],
   ['🏆 Лидеры', '❓ Помощь']
 ]).resize();
+
+// Добавляем проверку прав администратора
+const ADMIN_ID = 1126975443;
+const isAdmin = (ctx) => ctx.from.id === ADMIN_ID;
 
 // Регистрация пользователя при первом использовании
 bot.use(async (ctx, next) => {
@@ -125,7 +129,8 @@ bot.hears('👤 Профиль', async (ctx) => {
 });
 
 bot.hears('🛒 Купить животное', async (ctx) => {
-  const buttons = Object.entries(ANIMALS).map(([id, data]) => 
+  const sortedAnimals = Object.entries(ANIMALS).sort((a, b) => a[1].price - b[1].price);
+  const buttons = sortedAnimals.map(([id, data]) => 
     Markup.button.callback(
       `${data.name} ${data.price}💰`,
       `buy_${id}`
@@ -171,6 +176,7 @@ bot.hears('🥚 Собрать яйца', async (ctx) => {
 });
 
 bot.hears('💰 Продать яйца', async (ctx) => {
+  if (!isAdmin(ctx)) return ctx.reply('⛔ Доступ запрещен');
   ctx.reply('Напишите "/sell_eggs количество" чтобы продать яйца', gameKeyboard);
 });
 
@@ -234,6 +240,7 @@ bot.hears('❓ Помощь', (ctx) => {
 });
 
 bot.command('sell_eggs', async (ctx) => {
+  if (!isAdmin(ctx)) return ctx.reply('⛔ Доступ запрещен');
   const [amount] = ctx.message.text.split(' ').slice(1);
   
   if (!amount) {
@@ -343,6 +350,147 @@ User.afterFind(user => {
   if (user && !user[`sheep_count`]) {
     user[`sheep_count`] = 0;
   }
+});
+
+// Команда добавления денег
+bot.command('add_money', async (ctx) => {
+  if (!isAdmin(ctx)) return;
+  
+  const [userId, amount] = ctx.message.text.split(' ').slice(1);
+  const user = await User.findByPk(userId);
+  
+  if (!user) return ctx.reply('Пользователь не найден');
+  
+  user.money += parseFloat(amount);
+  await user.save();
+  ctx.reply(`✅ ${user.id} получено ${amount}💰`);
+  ctx.telegram.sendMessage(userId, `Получено ${amount}💰 от Администратора\nНовый баланс: ${user.money.toFixed(2)}💰`);
+});
+
+// Команда добавления яиц
+bot.command('add_eggs', async (ctx) => {
+  if (!isAdmin(ctx)) return;
+  
+  const [userId, amount] = ctx.message.text.split(' ').slice(1);
+  const user = await User.findByPk(userId);
+  
+  if (!user) return ctx.reply('Пользователь не найден');
+  
+  user.eggs += parseFloat(amount);
+  await user.save();
+  ctx.reply(`✅ ${user.id} получено ${amount}🥚`);
+  ctx.telegram.sendMessage(userId, `Получено ${amount}🥚 от Администратора\nНовый баланс: ${user.eggs.toFixed(2)}🥚`);
+});
+
+// Команда добавления животных
+bot.command('add_animal', async (ctx) => {
+  if (!isAdmin(ctx)) return;
+  
+  const [userId, animalId, count] = ctx.message.text.split(' ').slice(1);
+  const user = await User.findByPk(userId);
+  
+  if (!user) return ctx.reply('Пользователь не найден');
+  if (!ANIMALS[animalId]) return ctx.reply('Неверный тип животного');
+  
+  const field = `${animalId}_count`;
+  user[field] += parseInt(count);
+  await user.save();
+  ctx.reply(`✅ ${user.id} получено ${count} ${ANIMALS[animalId].name}`);
+  ctx.telegram.sendMessage(userId, `Получено ${count} ${ANIMALS[animalId].name} от Администратора\nТеперь у вас: ${user[field]}`);
+});
+
+// Команда установки денег
+bot.command('set_money', async (ctx) => {
+  if (!isAdmin(ctx)) return;
+  
+  const [userId, amount] = ctx.message.text.split(' ').slice(1);
+  const user = await User.findByPk(userId);
+  
+  if (!user) return ctx.reply('Пользователь не найден');
+  
+  user.money = parseFloat(amount);
+  await user.save();
+  ctx.reply(`✅ Для ${user.id} установлено ${amount}💰`);
+  ctx.telegram.sendMessage(userId, `Администратор установил ваш баланс: ${amount}💰`);
+});
+
+// Команда установки яиц
+bot.command('set_eggs', async (ctx) => {
+  if (!isAdmin(ctx)) return;
+  
+  const [userId, amount] = ctx.message.text.split(' ').slice(1);
+  const user = await User.findByPk(userId);
+  
+  if (!user) return ctx.reply('Пользователь не найден');
+  
+  user.eggs = parseFloat(amount);
+  await user.save();
+  ctx.reply(`✅ Для ${user.id} установлено ${amount}🥚`);
+  ctx.telegram.sendMessage(userId, `Администратор установил яйца: ${amount}🥚`);
+});
+
+// Команда удаления денег
+bot.command('delete_money', async (ctx) => {
+  if (!isAdmin(ctx)) return;
+  
+  const [userId, amount] = ctx.message.text.split(' ').slice(1);
+  const user = await User.findByPk(userId);
+  
+  if (!user) return ctx.reply('Пользователь не найден');
+  
+  user.money = Math.max(0, user.money - parseFloat(amount));
+  await user.save();
+  ctx.reply(`✅ У ${user.id} списано ${amount}💰`);
+  ctx.telegram.sendMessage(userId, `Администратор списал: ${amount}💰\nНовый баланс: ${user.money.toFixed(2)}💰`);
+});
+
+// Команда удаления яиц
+bot.command('delete_eggs', async (ctx) => {
+  if (!isAdmin(ctx)) return;
+  
+  const [userId, amount] = ctx.message.text.split(' ').slice(1);
+  const user = await User.findByPk(userId);
+  
+  if (!user) return ctx.reply('Пользователь не найден');
+  
+  user.eggs = Math.max(0, user.eggs - parseFloat(amount));
+  await user.save();
+  ctx.reply(`✅ У ${user.id} списано ${amount}🥚`);
+  ctx.telegram.sendMessage(userId, `Администратор списал: ${amount}🥚\nНовый баланс: ${user.eggs.toFixed(2)}🥚`);
+});
+
+// Команда установки животных
+bot.command('set_animal', async (ctx) => {
+  if (!isAdmin(ctx)) return;
+  
+  const [userId, animalId, count] = ctx.message.text.split(' ').slice(1);
+  const user = await User.findByPk(userId);
+  
+  if (!user) return ctx.reply('Пользователь не найден');
+  if (!ANIMALS[animalId]) return ctx.reply('Неверный тип животного');
+  
+  const field = `${animalId}_count`;
+  user[field] = Math.max(0, parseInt(count));
+  await user.save();
+  ctx.reply(`✅ Для ${user.id} установлено ${count} ${ANIMALS[animalId].name}`);
+  ctx.telegram.sendMessage(userId, `Администратор установил: ${count} ${ANIMALS[animalId].name}`);
+});
+
+// Команда удаления животных
+bot.command('delete_animal', async (ctx) => {
+  if (!isAdmin(ctx)) return;
+  
+  const [userId, animalId, count] = ctx.message.text.split(' ').slice(1);
+  const user = await User.findByPk(userId);
+  
+  if (!user) return ctx.reply('Пользователь не найден');
+  if (!ANIMALS[animalId]) return ctx.reply('Неверный тип животного');
+  
+  const field = `${animalId}_count`;
+  user[field] = Math.max(0, user[field] - parseInt(count));
+  await user.save();
+  ctx.reply(`✅ У ${user.id} списано ${count} ${ANIMALS[animalId].name}`);
+  ctx.telegram.sendMessage(userId, `Администратор списал: ${count} ${ANIMALS[animalId].name}\nОсталось: ${user[field]}`);
 });
 
 // Запуск
