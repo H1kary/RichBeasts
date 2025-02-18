@@ -74,6 +74,12 @@ const gameKeyboard = Markup.keyboard([
   ['🏆 Лидеры', '❓ Помощь']
 ]).resize();
 
+// Инициализация сессии должна быть первой
+bot.use(async (ctx, next) => {
+  ctx.session ??= { tradeData: {} };
+  return next();
+});
+
 // Добавляем проверку прав администратора
 const ADMIN_ID = 1126975443;
 const isAdmin = (ctx) => ctx.from.id === ADMIN_ID;
@@ -176,7 +182,6 @@ bot.hears('🥚 Собрать яйца', async (ctx) => {
 });
 
 bot.hears('💰 Продать яйца', async (ctx) => {
-  if (!isAdmin(ctx)) return ctx.reply('⛔ Доступ запрещен');
   ctx.reply('Напишите "/sell_eggs количество" чтобы продать яйца', gameKeyboard);
 });
 
@@ -200,13 +205,17 @@ bot.hears('🏆 Лидеры', async (ctx) => {
         : [u.firstName, u.lastName].filter(Boolean).join(' ') 
           || `ID: ${u.id}`;
       
+      // Экранируем специальные символы
+      name = name.replace(/([_*[\]()~`>#+=\-|{}.!])/g, '\\$1');
+      
       return `${index + 1}. ${u.id === userId ? '👉 ' : ''}${name} - ${u.money.toFixed(2)}💰`;
     }).join('\n');
 
     ctx.replyWithMarkdown(
       `*🏆 Топ-10 фермеров:*\n\n${top10}\n\n` +
       `*Ваша позиция:* ${userPosition}\n` +
-      `*Ваш баланс:* ${ctx.user.money.toFixed(2)}💰`
+      `*Ваш баланс:* ${ctx.user.money.toFixed(2)}💰`,
+      { disable_web_page_preview: true }
     );
   } catch (error) {
     console.error('Ошибка получения лидеров:', error);
@@ -239,95 +248,69 @@ bot.hears('❓ Помощь', (ctx) => {
   );
 });
 
-bot.command('sell_eggs', async (ctx) => {
-  if (!isAdmin(ctx)) return ctx.reply('⛔ Доступ запрещен');
-  const [amount] = ctx.message.text.split(' ').slice(1);
+bot.command('trade', async (ctx) => {
+  const [targetUsername, amountStr] = ctx.message.text.split(' ').slice(1);
   
-  if (!amount) {
-    return ctx.reply('❌ Укажите количество яиц для продажи\nПример: /sell_eggs 10');
-  }
-  
-  const cleanAmount = amount.replace(',', '.');
-  const eggsToSell = parseFloat(cleanAmount) || 0;
-  
-  if (eggsToSell <= 0) {
-    return ctx.reply('❌ Укажите положительное число больше нуля\nПример: /sell_eggs 10');
-  }
-  
-  if (ctx.user.eggs < eggsToSell) return ctx.reply(`Недостаточно яиц. У вас только ${ctx.user.eggs.toFixed(2)}🥚`);
-
-  const oldEggs = ctx.user.eggs;
-  const oldMoney = ctx.user.money;
-  
-  ctx.user.eggs -= eggsToSell;
-  const moneyReceived = eggsToSell * 0.5;
-  ctx.user.money = parseFloat((ctx.user.money + moneyReceived).toFixed(2));
-  
-  console.log('До продажи:', { eggs: oldEggs, money: oldMoney });
-  console.log('После продажи:', { eggs: ctx.user.eggs, money: ctx.user.money });
-  console.log(`Продажа: ${ctx.from.id} продал ${eggsToSell.toFixed(2)} яиц за ${moneyReceived.toFixed(2)}💰`);
-  await ctx.user.save();
-  
-  ctx.reply(
-    `Вы продали ${eggsToSell.toFixed(2)}🥚 и получили ${moneyReceived.toFixed(2)}💰\n` +
-    `Теперь у вас:\nЯйца: ${ctx.user.eggs.toFixed(2)}🥚\nДеньги: ${ctx.user.money.toFixed(2)}💰`,
-    gameKeyboard
-  );
-});
-
-// Обработчик выбора животного
-bot.action(/^buy_(\w+)$/, async (ctx) => {
-  const animalId = ctx.match[1];
-  const animal = ANIMALS[animalId];
-  
-  if (!animal) return ctx.answerCbQuery('⚠️ Животное не найдено');
-
-  const maxCount = Math.floor(ctx.user.money / animal.price);
-  if (maxCount < 1) {
-    return ctx.answerCbQuery('❌ Недостаточно средств');
+  // Проверка аргументов
+  if (!targetUsername || !amountStr) {
+    return ctx.replyWithMarkdown(
+      `❌ *Использование:*\n` +
+      `/trade @имя_пользователя сумма\n` +
+      `Пример: /trade @username 100`
+    );
   }
 
-  const buttons = [];
-  [1, 10, 50].forEach(num => {
-    if (num <= maxCount) {
-      buttons.push(Markup.button.callback(num.toString(), `buy:${animalId}:${num}`));
-    }
+  // Парсим сумму
+  const amount = parseFloat(amountStr.replace(',', '.'));
+  if (isNaN(amount) || amount <= 0) {
+    return ctx.reply('❌ Укажите корректную сумму больше нуля');
+  }
+
+  // Проверяем получателя
+  const cleanUsername = targetUsername.replace('@', '');
+  const receiver = await User.findOne({ 
+    where: { username: cleanUsername } 
   });
-  
-  if (maxCount > 1) {
-    buttons.push(Markup.button.callback(`MAX (${maxCount})`, `buy:${animalId}:${maxCount}`));
+
+  if (!receiver) {
+    return ctx.reply('❌ Пользователь не найден');
   }
 
-  ctx.editMessageText(
-    `Сколько ${animal.name} хотите купить? (Макс: ${maxCount})`,
-    Markup.inlineKeyboard(buttons, { columns: 4 })
-  );
-});
-
-// Обработчик подтверждения покупки
-bot.action(/^buy:(\w+):(\d+)$/, async (ctx) => {
-  const animalId = ctx.match[1];
-  const count = parseInt(ctx.match[2]);
-  const animal = ANIMALS[animalId];
-  
-  if (!animal || count < 1) {
-    return ctx.answerCbQuery('⚠️ Ошибка выбора');
+  if (receiver.id === ctx.user.id) {
+    return ctx.reply('❌ Нельзя передавать деньги самому себе');
   }
 
-  const totalPrice = animal.price * count;
-  if (ctx.user.money < totalPrice) {
-    return ctx.answerCbQuery('❌ Недостаточно средств');
+  // Проверяем баланс отправителя
+  if (ctx.user.money < amount) {
+    return ctx.reply(
+      `❌ Недостаточно средств. Ваш баланс: ${ctx.user.money.toFixed(2)}💰`
+    );
   }
 
-  ctx.user.money = parseFloat((ctx.user.money - totalPrice).toFixed(2));
-  ctx.user[`${animalId}_count`] += count;
-  await ctx.user.save();
-  
-  console.log(`Покупка: ${ctx.from.id} купил ${count} ${animal.name} за ${totalPrice}💰`);
-  ctx.editMessageText(
-    `✅ Успешно куплено ${count} ${animal.name} за ${totalPrice}💰\nНовый баланс: ${ctx.user.money.toFixed(2)}💰`
-  );
-  ctx.answerCbQuery();
+  try {
+    // Совершаем перевод
+    ctx.user.money -= amount;
+    receiver.money += amount;
+
+    await Promise.all([ctx.user.save(), receiver.save()]);
+
+    // Уведомления
+    ctx.replyWithMarkdown(
+      `✅ Вы успешно передали *${amount.toFixed(2)}💰* ` +
+      `пользователю @${receiver.username}`
+    );
+
+    ctx.telegram.sendMessage(
+      receiver.id,
+      `🎁 Вы получили *${amount.toFixed(2)}💰* ` +
+      `от @${ctx.user.username || ctx.user.first_name}`,
+      { parse_mode: 'Markdown' }
+    );
+
+  } catch (error) {
+    console.error('Ошибка перевода:', error);
+    ctx.reply('❌ Произошла ошибка при выполнении перевода');
+  }
 });
 
 // Обновляем модель пользователя (добавляем хук для инициализации animals)
@@ -491,6 +474,84 @@ bot.command('delete_animal', async (ctx) => {
   await user.save();
   ctx.reply(`✅ У ${user.id} списано ${count} ${ANIMALS[animalId].name}`);
   ctx.telegram.sendMessage(userId, `Администратор списал: ${count} ${ANIMALS[animalId].name}\nОсталось: ${user[field]}`);
+});
+
+// Команда продажи яиц
+bot.command('sell_eggs', async (ctx) => {
+  const [amount] = ctx.message.text.split(' ').slice(1);
+  
+  if (!amount) {
+    return ctx.reply('❌ Укажите количество яиц для продажи\nПример: /sell_eggs 10');
+  }
+
+  const user = ctx.user;
+  const eggsToSell = parseFloat(amount);
+  
+  if (eggsToSell > user.eggs) {
+    return ctx.reply('❌ Недостаточно яиц для продажи');
+  }
+
+  const moneyEarned = eggsToSell * 0.5;
+  user.eggs -= eggsToSell;
+  user.money += moneyEarned;
+  await user.save();
+  
+  ctx.reply(`✅ Вы продали ${eggsToSell} яиц за ${moneyEarned.toFixed(2)}💰`);
+  ctx.telegram.sendMessage(ctx.chat.id, `Вы продали ${eggsToSell} яиц за ${moneyEarned.toFixed(2)}💰`);
+});
+
+// Исправляем обработчик выбора животного
+bot.action(/^buy_(\w+)$/, async (ctx) => {
+  const animalId = ctx.match[1];
+  const animal = ANIMALS[animalId];
+  
+  if (!animal) return ctx.answerCbQuery('⚠️ Животное не найдено');
+
+  const maxCount = Math.floor(ctx.user.money / animal.price);
+  if (maxCount < 1) {
+    return ctx.answerCbQuery('❌ Недостаточно средств');
+  }
+
+  const buttons = [];
+  [1, 5, 10].forEach(num => { // Изменены варианты выбора количества
+    if (num <= maxCount) {
+      buttons.push(Markup.button.callback(num.toString(), `buy:${animalId}:${num}`));
+    }
+  });
+  
+  if (maxCount > 1) {
+    buttons.push(Markup.button.callback(`MAX (${maxCount})`, `buy:${animalId}:${maxCount}`));
+  }
+
+  await ctx.editMessageText( // Добавлен await
+    `Сколько ${animal.name} хотите купить? (Макс: ${maxCount})`,
+    Markup.inlineKeyboard(buttons, { columns: 4 })
+  );
+});
+
+// Исправляем обработчик подтверждения покупки
+bot.action(/^buy:(\w+):(\d+)$/, async (ctx) => {
+  const animalId = ctx.match[1];
+  const count = parseInt(ctx.match[2]);
+  const animal = ANIMALS[animalId];
+  
+  if (!animal || count < 1) {
+    return ctx.answerCbQuery('⚠️ Ошибка выбора');
+  }
+
+  const totalPrice = animal.price * count;
+  if (ctx.user.money < totalPrice) {
+    return ctx.answerCbQuery('❌ Недостаточно средств');
+  }
+
+  ctx.user.money = parseFloat((ctx.user.money - totalPrice).toFixed(2));
+  ctx.user[`${animalId}_count`] += count;
+  await ctx.user.save(); // Добавлен await
+  
+  ctx.editMessageText(
+    `✅ Успешно куплено ${count} ${animal.name} за ${totalPrice}💰\nНовый баланс: ${ctx.user.money.toFixed(2)}💰`
+  );
+  ctx.answerCbQuery();
 });
 
 // Запуск
