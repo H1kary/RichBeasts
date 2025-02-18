@@ -194,8 +194,8 @@ bot.hears('🥚 Собрать яйца', async (ctx) => {
 
 bot.hears('💰 Продать яйца', async (ctx) => {
   console.log(`[SELL] User ${ctx.from.id} (@${ctx.from.username || 'no_username'})`);
-  ctx.replyWithMarkdown(
-    `💰 *Продажа яиц*\n` +
+  ctx.reply(
+    `💰 Продажа яиц\n` +
     `Ваш баланс: ${ctx.user.eggs.toFixed(2)}🥚\n` +
     `Напишите "/sell_eggs количество" чтобы продать яйца`,
     gameKeyboard
