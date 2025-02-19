@@ -30,43 +30,43 @@ const User = sequelize.define('User', {
 const ANIMALS = {
   chicken: {
     name: '🐔 Курица',
-    price: 100,
-    eggsPerMinute: 1,
+    basePrice: 100,
+    baseEggs: 1,
     description: '1 яйцо/мин'
   },
   duck: {
     name: '🦆 Утка',
-    price: 500,
-    eggsPerMinute: 6.5,
+    basePrice: 500,
+    baseEggs: 6.5,
     description: '6.5 яиц/мин'
   },
   goose: {
     name: '🦢 Гусь',
-    price: 2000,
-    eggsPerMinute: 30,
+    basePrice: 2000,
+    baseEggs: 30,
     description: '30 яиц/мин'
   },
   sheep: {
     name: '🐑 Овца',
-    price: 5000,
-    eggsPerMinute: 100,
+    basePrice: 5000,
+    baseEggs: 100,
     description: '100 яиц/мин'
   },
   cow: {
     name: '🐄 Корова',
-    price: 25000,
-    eggsPerMinute: 650,
+    basePrice: 25000,
+    baseEggs: 650,
     description: '650 яиц/мин'
   },
   pig: {
     name: '🐖 Свинья',
-    price: 100000,
-    eggsPerMinute: 3000,
+    basePrice: 100000,
+    baseEggs: 3000,
     description: '3000 яиц/мин'
   }
 };
 
-const bot = new Telegraf(process.env.BOT_TOKEN);
+const bot = new Telegraf(process.env.TEST_BOT_TOKEN);
 
 // Создаем клавиатуру
 const gameKeyboard = Markup.keyboard([
@@ -124,10 +124,15 @@ bot.start((ctx) => {
 bot.hears('👤 Профиль', async (ctx) => {
   console.log(`[PROFILE] User ${ctx.from.id} (@${ctx.from.username || 'no_username'})`);
   const user = ctx.user;
+  let totalPerMinute = 0;
+  
   const list = Object.entries(ANIMALS)
     .map(([id, animal]) => {
       const count = user[`${id}_count`];
-      return count > 0 ? `${animal.name} - ${count} шт.` : '';
+      const production = getAnimalProduction(user, id) * count;
+      totalPerMinute += production;
+      return count > 0 ? 
+        `${animal.name} ${count}шт. (${production.toFixed(1)}/мин)` : '';
     })
     .filter(Boolean)
     .join('\n') || 'У вас пока нет животных';
@@ -136,6 +141,7 @@ bot.hears('👤 Профиль', async (ctx) => {
     `*👤 Ваш профиль*\n\n` +
     `🥚 *Яйца:* ${user.eggs.toFixed(2)}\n` +
     `💰 *Деньги:* ${user.money.toFixed(2)}\n` +
+    `⚡ *Общая скорость:* ${totalPerMinute.toFixed(2)} яиц/мин\n` +
     `*Животные:*\n${list}`,
     gameKeyboard
   );
@@ -143,13 +149,14 @@ bot.hears('👤 Профиль', async (ctx) => {
 
 bot.hears('🛒 Купить животное', async (ctx) => {
   console.log(`[SHOP] User ${ctx.from.id} (@${ctx.from.username || 'no_username'})`);
-  const sortedAnimals = Object.entries(ANIMALS).sort((a, b) => a[1].price - b[1].price);
-  const buttons = sortedAnimals.map(([id, data]) => 
-    Markup.button.callback(
-      `${data.name} ${data.price}💰`,
+  const sortedAnimals = Object.entries(ANIMALS).sort((a, b) => a[1].basePrice - b[1].basePrice);
+  const buttons = sortedAnimals.map(([id, data]) => {
+    const currentPrice = getAnimalPrice(ctx.user, id);
+    return Markup.button.callback(
+      `${data.name} ~${currentPrice}💰`,
       `buy_${id}`
     )
-  );
+  });
   ctx.replyWithMarkdown(
     `*🛒 Магазин животных*\nВаш баланс: ${ctx.user.money.toFixed(2)}💰\nВыберите животное:`,
     Markup.inlineKeyboard(buttons, { columns: 2 })
@@ -157,24 +164,26 @@ bot.hears('🛒 Купить животное', async (ctx) => {
 });
 
 bot.hears('🥚 Собрать яйца', async (ctx) => {
-  console.log(`[COLLECT] User ${ctx.from.id} (@${ctx.from.username || 'no_username'})`);
+  let totalEggs = 0;
+  
   const now = new Date();
   const last = new Date(ctx.user.lastCollection);
   const minutes = Math.max(0, Math.floor((now - last) / 60000));
   
-  console.log(`Время с последнего сбора: ${minutes} минут`);
-  console.log('Последнее время сбора:', ctx.user.lastCollection);
-  console.log('Текущее время:', now);
-
-  let totalEggs = 0;
-  Object.entries(ANIMALS).forEach(([id, animal]) => {
+  console.log(`[COLLECT] User ${ctx.from.id} (@${ctx.from.username || 'no_username'}) начал сбор яиц`);
+  
+  Object.entries(ANIMALS).forEach(([id]) => {
     const count = ctx.user[`${id}_count`];
-    const eggs = count * animal.eggsPerMinute * minutes;
-    console.log(`${animal.name}: ${count} * ${animal.eggsPerMinute} * ${minutes} = ${eggs.toFixed(2)} яиц`);
+    let production = 0;
+    for(let i = 0; i < count; i++) {
+      production += ANIMALS[id].baseEggs / Math.pow(1.0035, i);
+    }
+    const eggs = production * minutes;
+    console.log(`${ANIMALS[id].name}: ${count} * ${ANIMALS[id].baseEggs} * ${minutes} = ${eggs.toFixed(2)} яиц`);
     totalEggs += eggs;
   });
 
-  console.log('Всего собрано яиц:', totalEggs.toFixed(2));
+  console.log(`[COLLECT] User ${ctx.from.id} (@${ctx.from.username || 'no_username'}) всего яиц: ${totalEggs.toFixed(2)}`);
 
   if (totalEggs === 0) {
     return ctx.reply('Яйца еще не созрели! Проверьте наличие животных и подождите хотя бы 1 минуту', gameKeyboard);
@@ -184,7 +193,7 @@ bot.hears('🥚 Собрать яйца', async (ctx) => {
   ctx.user.lastCollection = now;
   await ctx.user.save();
   
-  console.log(`Сбор яиц: ${ctx.from.id} собрал ${totalEggs.toFixed(2)} яиц`);
+  console.log(`[COLLECT] User ${ctx.from.id} (@${ctx.from.username || 'no_username'}) собрал ${totalEggs.toFixed(2)} яиц`);
   ctx.replyWithMarkdown(
     `🥚 *Собрано яиц:* ${totalEggs.toFixed(2)}\n` +
     `💰 *Текущее количество яиц:* ${ctx.user.eggs.toFixed(2)}\n`,
@@ -194,11 +203,15 @@ bot.hears('🥚 Собрать яйца', async (ctx) => {
 
 bot.hears('💰 Продать яйца', async (ctx) => {
   console.log(`[SELL] User ${ctx.from.id} (@${ctx.from.username || 'no_username'})`);
-  ctx.reply(
-    `💰 Продажа яиц\n` +
-    `Ваш баланс: ${ctx.user.eggs.toFixed(2)}🥚\n` +
-    `Напишите "/sell_eggs количество" чтобы продать яйца`,
-    gameKeyboard
+  ctx.replyWithMarkdown(
+    `💰 *Продажа яиц*\n` +
+    `Ваш баланс: ${ctx.user.eggs.toFixed(2)}🥚`,
+    Markup.inlineKeyboard([
+      Markup.button.callback('10🥚', 'sell_eggs_10'),
+      Markup.button.callback('100🥚', 'sell_eggs_100'),
+      Markup.button.callback('1000🥚', 'sell_eggs_1000'),
+      Markup.button.callback(`ВСЕ (${ctx.user.eggs.toFixed(0)})`, 'sell_eggs_all')
+    ], { columns: 2 })
   );
 });
 
@@ -232,7 +245,7 @@ const handleLeaders = async (ctx) => {
       { disable_web_page_preview: true }
     );
   } catch (error) {
-    console.error('Ошибка получения лидеров:', error);
+    console.error(`[LEADERS_ERROR] User ${ctx.from.id} (@${ctx.from.username || 'no_username'}):`, error);
     ctx.reply('⚠️ Не удалось загрузить таблицу лидеров');
   }
 };
@@ -249,20 +262,43 @@ bot.action('show_leaders', async (ctx) => {
 const handleHelp = (ctx) => {
   const animalsInfo = Object.entries(ANIMALS)
     .map(([_, data]) => 
-      `▫️ <b>${data.name}</b> - ${data.description}\n   Цена: ${data.price}💰`
+      `▫️ <b>${data.name}</b> - ${data.description}\n   Базовая цена: ${data.basePrice}💰`
     )
     .join('\n');
   
   return ctx.reply(
-    `<b>🐔 Ферма помощи</b>\n\n` +
-    `<b>Экономика:</b>\n` +
-    `🥚 1 яйцо = 0.5💰\n\n` +
-    `<b>Доступные животные:</b>\n${animalsInfo}\n\n` +
-    `<b>Основные команды:</b>\n` +
-    `👉 Профиль 👤 - ваш баланс и животные\n` +
-    `👉 Купить животное 🛒 - расширение фермы\n` +
-    `👉 Собрать яйца 🥚 - получение дохода\n` +
-    `👉 Продать яйца 💰 - конвертация в деньги`,
+    `<b>📚 Полное руководство по ферме</b>\n\n` +
+
+    `<b>🎮 Основные механики:</b>\n` +
+    `⏳ Яйца автоматически накапливаются со временем\n` +
+    `📈 Цены животных растут на 5% за каждое купленное\n` +
+    `📉 Продуктивность падает на 0.35% за каждое животное\n` +
+    `🔄 Можно продавать яйца по курсу 1🥚 = 0.5💰\n\n` +
+
+    `<b>📦 Производство яиц:</b>\n` +
+    `• Собирайте яйца каждые 5+ минут\n` +
+    `• Чем больше животных - тем выше доход\n` +
+    `• Формула: (базовая продуктивность) × (кол-во) × (время в минутах)\n\n` +
+
+    `<b>🏷️ Динамические цены:</b>\n` +
+    `• Цена N-го животного = базовая × 1.05^N\n` +
+    `• Пример: 10-я курица будет стоить ${Math.round(100 * Math.pow(1.05, 9))}💰\n\n` +
+
+    `<b>📊 Продуктивность:</b>\n` +
+    `• Продуктивность N-го животного = базовая / 1.0035^N\n` +
+    `• Пример: 50-я курица даёт ${(1 / Math.pow(1.0035, 49)).toFixed(2)}🥚/мин\n\n` +
+
+    `<b>🛒 Магазин животных:</b>\n${animalsInfo}\n\n` +
+
+    `<b>🔁 Система обмена:</b>\n` +
+    `• Минимальная сумма: 1💰\n` +
+    `• Используйте /trade @username сумма\n` +
+    `• Комиссия: 0%\n\n` +
+
+    `<b>🏆 Рейтинг лидеров:</b>\n` +
+    `• Обновляется в реальном времени\n` +
+    `• Топ-10 игроков по балансу\n` +
+    `• Ваша позиция отображается в профиле`,
     { 
       parse_mode: 'HTML',
       reply_markup: gameKeyboard.reply_markup 
@@ -280,26 +316,35 @@ bot.action('show_help', async (ctx) => {
 });
 
 bot.command('trade', async (ctx) => {
-  console.log(`[TRADE_ATTEMPT] User ${ctx.from.id} пытается передать деньги`);
-  const [targetUsername, amountStr] = ctx.message.text.split(' ').slice(1);
+  console.log(`[TRADE_ATTEMPT] User ${ctx.from.id} (@${ctx.from.username || 'no_username'}) пытается передать деньги`);
   
-  // Проверка аргументов
-  if (!targetUsername || !amountStr) {
+  // Проверка формата команды
+  if (ctx.message.text.split(' ').length < 3) {
     return ctx.replyWithMarkdown(
-      `❌ *Использование:*\n` +
-      `/trade @имя_пользователя сумма\n` +
-      `Пример: /trade @username 100`
+      '❌ *Неверный формат!*\n' +
+      'Используйте: `/trade @username сумма`\n' +
+      'Пример: `/trade @user123 500`'
     );
   }
 
+  const [targetUsername, amountStr] = ctx.message.text.split(' ').slice(1);
+  
   // Парсим сумму
   const amount = parseFloat(amountStr.replace(',', '.'));
-  if (isNaN(amount) || amount <= 0) {
-    return ctx.reply('❌ Укажите корректную сумму больше нуля');
+  if (isNaN(amount) || amount < 1) {
+    return ctx.replyWithMarkdown(
+      '❌ *Некорректная сумма!*\n' +
+      'Минимальная сумма для перевода: `1💰`\n' +
+      'Пример: `/trade @user123 100`'
+    );
   }
 
   // Проверяем получателя
   const cleanUsername = targetUsername.replace('@', '');
+  if (!cleanUsername.match(/^[a-zA-Z0-9_]{5,32}$/)) {
+    return ctx.reply('❌ Некорректное имя пользователя');
+  }
+
   const receiver = await User.findOne({ 
     where: { username: cleanUsername } 
   });
@@ -317,6 +362,11 @@ bot.command('trade', async (ctx) => {
     return ctx.reply(
       `❌ Недостаточно средств. Ваш баланс: ${ctx.user.money.toFixed(2)}💰`
     );
+  }
+
+  // Проверка на максимальную сумму
+  if (amount > 1_000_000) {
+    return ctx.reply('❌ Максимальная сумма перевода: 1,000,000💰');
   }
 
   try {
@@ -339,11 +389,14 @@ bot.command('trade', async (ctx) => {
       { parse_mode: 'Markdown' }
     );
 
-    console.log(`[TRADE_SUCCESS] User ${ctx.from.id} передал ${amount}💰 пользователю ${receiver.id}`);
+    console.log(`[TRADE_SUCCESS] User ${ctx.from.id} (@${ctx.from.username || 'no_username'}) передал ${amount}💰 пользователю ${receiver.id}`);
 
   } catch (error) {
-    console.error(`[TRADE_FAIL] User ${ctx.from.id}: ${error.message}`);
-    ctx.reply('❌ Произошла ошибка при выполнении перевода');
+    console.error(`[TRADE_ERROR] User ${ctx.from.id} (@${ctx.from.username || 'no_username'}):`, error);
+    ctx.replyWithMarkdown(
+      '❌ *Ошибка перевода!*\n' +
+      'Попробуйте позже или обратитесь в поддержку'
+    );
   }
 });
 
@@ -511,43 +564,32 @@ bot.command('delete_animal', async (ctx) => {
   ctx.telegram.sendMessage(userId, `Администратор списал: ${count} ${ANIMALS[animalId].name}\nОсталось: ${user[field]}`);
 });
 
-// Команда продажи яиц
-bot.command('sell_eggs', async (ctx) => {
-  const [amount] = ctx.message.text.split(' ').slice(1);
-  
-  if (!amount) {
-    return ctx.reply('❌ Укажите количество яиц для продажи\nПример: /sell_eggs 10');
-  }
+// Добавляем функции расчета цены и продуктивности
+const getAnimalPrice = (user, animalId, currentCount = user[`${animalId}_count`]) => {
+  const base = ANIMALS[animalId].basePrice;
+  return Math.round(base * Math.pow(1.05, currentCount));
+};
 
-  const user = ctx.user;
-  const eggsToSell = parseFloat(amount);
-  
-  if (eggsToSell > user.eggs) {
-    return ctx.reply('❌ Недостаточно яиц для продажи');
-  }
+const getAnimalProduction = (user, animalId) => {
+  const base = ANIMALS[animalId].baseEggs;
+  const count = user[`${animalId}_count`];
+  return base / Math.pow(1.0035, count);
+};
 
-  const moneyEarned = eggsToSell * 0.5;
-  user.eggs -= eggsToSell;
-  user.money += moneyEarned;
-  await user.save();
-  
-  ctx.reply(`✅ Вы продали ${eggsToSell} яиц за ${moneyEarned.toFixed(2)}💰`);
-});
-
-// Исправляем обработчик выбора животного
+// Добавляем обработчик выбора животного в магазине
 bot.action(/^buy_(\w+)$/, async (ctx) => {
   const animalId = ctx.match[1];
   const animal = ANIMALS[animalId];
   
   if (!animal) return ctx.answerCbQuery('⚠️ Животное не найдено');
 
-  const maxCount = Math.floor(ctx.user.money / animal.price);
+  const maxCount = Math.floor(ctx.user.money / getAnimalPrice(ctx.user, animalId));
   if (maxCount < 1) {
     return ctx.answerCbQuery('❌ Недостаточно средств');
   }
 
   const buttons = [];
-  [1, 5, 10].forEach(num => { // Изменены варианты выбора количества
+  [1, 5, 10].forEach(num => {
     if (num <= maxCount) {
       buttons.push(Markup.button.callback(num.toString(), `buy:${animalId}:${num}`));
     }
@@ -557,13 +599,13 @@ bot.action(/^buy_(\w+)$/, async (ctx) => {
     buttons.push(Markup.button.callback(`MAX (${maxCount})`, `buy:${animalId}:${maxCount}`));
   }
 
-  await ctx.editMessageText( // Добавлен await
+  await ctx.editMessageText(
     `Сколько ${animal.name} хотите купить? (Макс: ${maxCount})`,
     Markup.inlineKeyboard(buttons, { columns: 4 })
   );
 });
 
-// Исправляем обработчик подтверждения покупки
+// Обновляем обработчик выбора количества
 bot.action(/^buy:(\w+):(\d+)$/, async (ctx) => {
   const animalId = ctx.match[1];
   const count = parseInt(ctx.match[2]);
@@ -573,17 +615,29 @@ bot.action(/^buy:(\w+):(\d+)$/, async (ctx) => {
     return ctx.answerCbQuery('⚠️ Ошибка выбора');
   }
 
-  const totalPrice = animal.price * count;
+  // Рассчитываем общую стоимость
+  let totalPrice = 0;
+  for(let i = 0; i < count; i++) {
+    const currentCount = ctx.user[`${animalId}_count`] + i;
+    totalPrice += getAnimalPrice(ctx.user, animalId, currentCount);
+  }
+
   if (ctx.user.money < totalPrice) {
     return ctx.answerCbQuery('❌ Недостаточно средств');
   }
 
+  // Обновляем данные пользователя
   ctx.user.money = parseFloat((ctx.user.money - totalPrice).toFixed(2));
   ctx.user[`${animalId}_count`] += count;
-  await ctx.user.save(); // Добавлен await
+  await ctx.user.save();
+  
+  // Рассчитываем следующую цену
+  const nextPrice = getAnimalPrice(ctx.user, animalId, ctx.user[`${animalId}_count`]);
   
   ctx.editMessageText(
-    `✅ Успешно куплено ${count} ${animal.name} за ${totalPrice}💰\nНовый баланс: ${ctx.user.money.toFixed(2)}💰`
+    `✅ Куплено ${count} ${animal.name}\n` +
+    `💰 Общая стоимость: ${totalPrice}💰\n` +
+    `📉 Следующая цена: ${nextPrice}💰`
   );
   ctx.answerCbQuery();
 });
@@ -614,6 +668,45 @@ bot.action('show_trade_help', async (ctx) => {
     `⚠️ *Ограничения:*\n` +
     `- Минимальная сумма: 1💰\n`
   );
+});
+
+// Добавляем новый обработчик для кнопок
+bot.action(/^sell_eggs_(.+)$/, async (ctx) => {
+  const amountType = ctx.match[1];
+  const user = ctx.user;
+  let eggsToSell = 0;
+
+  switch(amountType) {
+    case '10':
+      eggsToSell = 10;
+      break;
+    case '100':
+      eggsToSell = 100;
+      break;
+    case '1000':
+      eggsToSell = 1000;
+      break;
+    case 'all':
+      eggsToSell = user.eggs;
+      break;
+    default:
+      return ctx.answerCbQuery('❌ Неверный выбор');
+  }
+
+  if (eggsToSell > user.eggs) {
+    return ctx.answerCbQuery('❌ Недостаточно яиц');
+  }
+
+  const moneyEarned = eggsToSell * 0.5;
+  user.eggs -= eggsToSell;
+  user.money += moneyEarned;
+  await user.save();
+
+  ctx.editMessageText(
+    `✅ Продано ${eggsToSell.toFixed(2)}🥚 за ${moneyEarned.toFixed(2)}💰\n` +
+    `Новый баланс: ${user.eggs.toFixed(2)}🥚 | ${user.money.toFixed(2)}💰`
+  );
+  ctx.answerCbQuery();
 });
 
 bot.launch();
