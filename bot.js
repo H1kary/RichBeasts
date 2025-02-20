@@ -26,7 +26,10 @@ const User = sequelize.define('User', {
   sheep_count: { type: DataTypes.INTEGER, defaultValue: 0 },
   lastDailyBonus: { type: DataTypes.DATE, defaultValue: null },
 }, {
-  tableName: 'Users' // Явно указываем имя таблицы
+  tableName: 'Users',
+  timestamps: true,
+  createdAt: true,
+  updatedAt: false  // ← Отключаем только updatedAt
 });
 
 // Новый конфиг животных (отсортирован по стоимости)
