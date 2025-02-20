@@ -19,12 +19,37 @@ const User = sequelize.define('User', {
   money: { type: DataTypes.DECIMAL(10, 2), defaultValue: 100.0 },
   lastCollection: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
   chicken_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  incubator_count: { type: DataTypes.INTEGER, defaultValue: 0 },
   duck_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  aviary_count: { type: DataTypes.INTEGER, defaultValue: 0 },
   goose_count: { type: DataTypes.INTEGER, defaultValue: 0 },
   cow_count: { type: DataTypes.INTEGER, defaultValue: 0 },
   pig_count: { type: DataTypes.INTEGER, defaultValue: 0 },
   sheep_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  milk: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0.0 },       // Молоко от коров
+  meat: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0.0 },       // Мясо от свиней
+  wool: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0.0 },       // Шерсть от овец
+  feathers: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0.0 },    // Перья от уток
+  down: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0.0 },      // Пух от гусей
   lastDailyBonus: { type: DataTypes.DATE, defaultValue: null },
+  egg_robot_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  egg_factory_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  egg_3d_printer_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  feather_drone_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  feather_nano_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  feather_matrix_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  down_cloud_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  down_quantum_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  down_blackhole_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  wool_ai_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  wool_reactor_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  wool_galaxy_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  milk_asteroid_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  milk_quantum_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  milk_singularity_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  meat_hologram_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  meat_portal_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  meat_bigbang_count: { type: DataTypes.INTEGER, defaultValue: 0 }
 }, {
   tableName: 'Users',
   timestamps: true,
@@ -32,44 +57,258 @@ const User = sequelize.define('User', {
   updatedAt: false  // ← Отключаем только updatedAt
 });
 
-// Новый конфиг животных (отсортирован по стоимости)
-const ANIMALS = {
-  chicken: {
-    name: '🐔 Курица',
-    basePrice: 100,
-    baseEggs: 1,
-    description: '1 яйцо/мин'
+// Обновляем структуру ANIMAL_CATEGORIES
+const ANIMAL_CATEGORIES = {
+  eggs: {
+    name: '🥚 Яйца',
+    producers: [
+      {
+        id: 'chicken',
+        name: '🐔 Курица',
+        basePrice: 50,
+        production: 1,
+        description: '1 🥚/мин'
+      },
+      {
+        id: 'incubator',
+        name: '🏭 Инкубатор',
+        basePrice: 500,
+        production: 15,
+        description: '15 🥚/мин'
+      },
+      {
+        id: 'egg_robot',
+        name: '🤖 Яйцеробот',
+        basePrice: 2500,
+        production: 50,
+        description: '50 🥚/мин'
+      },
+      {
+        id: 'egg_factory',
+        name: '🏭 Яичный комбинат',
+        basePrice: 10000,
+        production: 200,
+        description: '200 🥚/мин'
+      },
+      {
+        id: 'egg_3d_printer',
+        name: '🖨 3D Принтер яиц',
+        basePrice: 50000,
+        production: 1000,
+        description: '1000 🥚/мин'
+      }
+    ]
   },
-  duck: {
-    name: '🦆 Утка',
-    basePrice: 500,
-    baseEggs: 6.5,
-    description: '6.5 яиц/мин'
+  feathers: {
+    name: '🪶 Перья',
+    producers: [
+      {
+        id: 'duck',
+        name: '🦆 Утка',
+        basePrice: 100,
+        production: 1,
+        description: '1 🪶/мин'
+      },
+      {
+        id: 'aviary',
+        name: '🏭 Птичник',
+        basePrice: 1200,
+        production: 20,
+        description: '20 🪶/мин'
+      },
+      {
+        id: 'feather_drone',
+        name: '🚁 Перьедыр',
+        basePrice: 6000,
+        production: 100,
+        description: '100 🪶/мин'
+      },
+      {
+        id: 'feather_nano',
+        name: '⚛ Нано-перья',
+        basePrice: 30000,
+        production: 500,
+        description: '500 🪶/мин'
+      },
+      {
+        id: 'feather_matrix',
+        name: '🧿 Матрица перьев',
+        basePrice: 150000,
+        production: 2500,
+        description: '2500 🪶/мин'
+      }
+    ]
   },
-  goose: {
-    name: '🦢 Гусь',
-    basePrice: 2000,
-    baseEggs: 30,
-    description: '30 яиц/мин'
+  down: {
+    name: '🛌 Пух',
+    producers: [
+      {
+        id: 'goose',
+        name: '🦢 Гусь',
+        basePrice: 200,
+        production: 1,
+        description: '1 🛌/мин'
+      },
+      {
+        id: 'down_farm',
+        name: '🏭 Пуховая ферма',
+        basePrice: 2500,
+        production: 25,
+        description: '25 🛌/мин'
+      },
+      {
+        id: 'down_cloud',
+        name: '☁ Пуховое облако',
+        basePrice: 15000,
+        production: 150,
+        description: '150 🛌/мин'
+      },
+      {
+        id: 'down_quantum',
+        name: '⚛ Квантовый пух',
+        basePrice: 75000,
+        production: 800,
+        description: '800 🛌/мин'
+      },
+      {
+        id: 'down_blackhole',
+        name: '🕳 Пуховая черная дыра',
+        basePrice: 300000,
+        production: 4000,
+        description: '4000 🛌/мин'
+      }
+    ]
   },
-  sheep: {
-    name: '🐑 Овца',
-    basePrice: 5000,
-    baseEggs: 100,
-    description: '100 яиц/мин'
+  wool: {
+    name: '🧶 Шерсть',
+    producers: [
+      {
+        id: 'sheep',
+        name: '🐑 Овца',
+        basePrice: 300,
+        production: 1,
+        description: '1 🧶/мин'
+      },
+      {
+        id: 'wool_factory',
+        name: '🏭 Шерстяная фабрика',
+        basePrice: 3500,
+        production: 30,
+        description: '30 🧶/мин'
+      },
+      {
+        id: 'wool_ai',
+        name: '🧠 ИИ-Прядильщик',
+        basePrice: 20000,
+        production: 200,
+        description: '200 🧶/мин'
+      },
+      {
+        id: 'wool_reactor',
+        name: '☢ Шерстяной реактор',
+        basePrice: 100000,
+        production: 1200,
+        description: '1200 🧶/мин'
+      },
+      {
+        id: 'wool_galaxy',
+        name: '🌌 Галактика шерсти',
+        basePrice: 500000,
+        production: 10000,
+        description: '10000 🧶/мин'
+      }
+    ]
   },
-  cow: {
-    name: '🐄 Корова',
-    basePrice: 25000,
-    baseEggs: 650,
-    description: '650 яиц/мин'
+  milk: {
+    name: '🥛 Молоко',
+    producers: [
+      {
+        id: 'cow',
+        name: '🐄 Корова',
+        basePrice: 400,
+        production: 1,
+        description: '1 🥛/мин'
+      },
+      {
+        id: 'dairy_plant',
+        name: '🏭 Молочный завод',
+        basePrice: 5000,
+        production: 40,
+        description: '40 🥛/мин'
+      },
+      {
+        id: 'milk_asteroid',
+        name: '☄ Молочный астероид',
+        basePrice: 30000,
+        production: 300,
+        description: '300 🥛/мин'
+      },
+      {
+        id: 'milk_quantum',
+        name: '⚛ Квантовая дойка',
+        basePrice: 150000,
+        production: 2000,
+        description: '2000 🥛/мин'
+      },
+      {
+        id: 'milk_singularity',
+        name: '🌀 Молочная сингулярность',
+        basePrice: 750000,
+        production: 15000,
+        description: '15000 🥛/мин'
+      }
+    ]
   },
-  pig: {
-    name: '🐖 Свинья',
-    basePrice: 100000,
-    baseEggs: 3000,
-    description: '3000 яиц/мин'
+  meat: {
+    name: '🥩 Мясо',
+    producers: [
+      {
+        id: 'pig',
+        name: '🐖 Свинья',
+        basePrice: 600,
+        production: 1,
+        description: '1 🥩/мин'
+      },
+      {
+        id: 'meat_combine',
+        name: '🏭 Мясной комбинат',
+        basePrice: 7500,
+        production: 50,
+        description: '50 🥩/мин'
+      },
+      {
+        id: 'meat_hologram',
+        name: '👽 Голограммятина',
+        basePrice: 50000,
+        production: 400,
+        description: '400 🥩/мин'
+      },
+      {
+        id: 'meat_portal',
+        name: '🌀 Мясной портал',
+        basePrice: 250000,
+        production: 3000,
+        description: '3000 🥩/мин'
+      },
+      {
+        id: 'meat_bigbang',
+        name: '💥 Мясной Большой Взрыв',
+        basePrice: 1000000,
+        production: 25000,
+        description: '25000 🥩/мин'
+      }
+    ]
   }
+};
+
+// Добавляем цены на ресурсы
+const RESOURCE_PRICES = {
+  eggs: 0.1,     // Базовый ресурс
+  feathers: 0.5, // Редкие перья
+  down: 1.2,     // Ценный пух
+  wool: 2.0,     // Качественная шерсть
+  milk: 3.5,     // Премиальное молоко
+  meat: 5.0      // Элитное мясо
 };
 
 // Добавляем синхронизацию перед использованием бота
@@ -86,7 +325,7 @@ const getMainKeyboard = (user) => {
   
   return Markup.keyboard([
     ['👤 Профиль', '🛒 Купить животное'],
-    ['🥚 Собрать яйца', '💰 Продать яйца'],
+    ['📦 Собрать ресурсы', '💰 Продать ресурсы'],
     bonusAvailable 
       ? ['🎁 Ежедневный бонус', '🔍 Дополнительно']
       : ['🔍 Дополнительно']
@@ -144,102 +383,157 @@ bot.use(async (ctx, next) => {
 bot.start((ctx) => {
   console.log(`[START] User ${ctx.from.id} (@${ctx.from.username || 'no_username'})`);
   ctx.replyWithMarkdown(
-    `🎮 *Добро пожаловать на ферму!*\nНачальный капитал: ${ctx.user.money.toFixed(2)}💰`, 
+    '🎮 *Добро пожаловать на ферму!*\nНачальный капитал: ${ctx.user.money.toFixed(2)}💰', 
     getMainKeyboard(ctx.user)
   )
 });
 
 bot.hears('👤 Профиль', async (ctx) => {
-  console.log(`[PROFILE] User ${ctx.from.id} (@${ctx.from.username || 'no_username'})`);
   const user = ctx.user;
   let totalPerMinute = 0;
   
-  const list = Object.entries(ANIMALS)
-    .map(([id, animal]) => {
-      const count = user[`${id}_count`];
-      const production = getAnimalProduction(user, id) * count;
+  // Собираем всех производителей
+  const allProducers = Object.values(ANIMAL_CATEGORIES)
+    .flatMap(cat => cat.producers.map(p => ({ ...p, category: cat.name })));
+  
+  const animalsList = allProducers
+    .map(producer => {
+      const count = user[`${producer.id}_count`];
+      const production = getAnimalProduction(user, producer.id) * count;
       totalPerMinute += production;
-      return count > 0 ? 
-        `${animal.name} ${count}шт. (${production.toFixed(1)}/мин)` : '';
+      const categoryMap = {
+        '🥚 Яйца': 'eggs',
+        '🪶 Перья': 'feathers',
+        '🛌 Пух': 'down',
+        '🧶 Шерсть': 'wool',
+        '🥛 Молоко': 'milk',
+        '🥩 Мясо': 'meat'
+      };
+      const emoji = {
+        eggs: '🥚', feathers: '🪶', down: '🛌',
+        wool: '🧶', milk: '🥛', meat: '🥩'
+      }[categoryMap[producer.category]];
+      
+      return count > 0 
+        ? `${producer.name} ${count}шт. (${Math.round(production)}${emoji}/мин)`
+        : '';
     })
     .filter(Boolean)
     .join('\n') || 'У вас пока нет животных';
-  
+
+  // Сортируем ресурсы по цене
+  const sortedResources = Object.entries(RESOURCE_PRICES)
+    .sort((a, b) => Object.keys(RESOURCE_PRICES).indexOf(a[0]) - Object.keys(RESOURCE_PRICES).indexOf(b[0]))
+    .map(([res]) => res);
+
   ctx.replyWithMarkdown(
     `*👤 Ваш профиль*\n\n` +
-    `🥚 *Яйца:* ${user.eggs.toFixed(2)}\n` +
-    `💰 *Деньги:* ${user.money.toFixed(2)}\n` +
-    `⚡ *Общая скорость:* ${totalPerMinute.toFixed(2)} яиц/мин\n` +
-    `*Животные:*\n${list}`,
+    `${sortedResources.map(res => {
+      const emoji = {
+        eggs: '🥚', feathers: '🪶', down: '🛌',
+        wool: '🧶', milk: '🥛', meat: '🥩'
+      }[res];
+      return `${emoji} ${getResourceName(res)}: ${user[res].toFixed(2)}`;
+    }).join('\n')}\n\n` +
+    `💰 Деньги: ${user.money.toFixed(2)}\n` +
+    `*Производства:*\n${animalsList}`,
     getMainKeyboard(user)
   );
 });
 
 bot.hears('🛒 Купить животное', async (ctx) => {
-  console.log(`[SHOP] User ${ctx.from.id} (@${ctx.from.username || 'no_username'})`);
-  const sortedAnimals = Object.entries(ANIMALS).sort((a, b) => a[1].basePrice - b[1].basePrice);
-  const buttons = sortedAnimals.map(([id, data]) => {
-    const currentPrice = getAnimalPrice(ctx.user, id);
-    return Markup.button.callback(
-      `${data.name} ~${currentPrice}💰`,
-      `buy_${id}`
-    )
-  });
+  const buttons = Object.entries(ANIMAL_CATEGORIES).map(([id, category]) => 
+    Markup.button.callback(category.name, `buy_category_${id}`)
+  );
+  
   ctx.replyWithMarkdown(
-    `*🛒 Магазин животных*\nВаш баланс: ${ctx.user.money.toFixed(2)}💰\nВыберите животное:`,
+    '🏭 *Выберите тип производства:*',
     Markup.inlineKeyboard(buttons, { columns: 2 })
   );
 });
 
-bot.hears('🥚 Собрать яйца', async (ctx) => {
-  let totalEggs = 0;
-  
+bot.hears('📦 Собрать ресурсы', async (ctx) => {
   const now = new Date();
   const last = new Date(ctx.user.lastCollection);
-  const minutes = Math.max(0, Math.floor((now - last) / 60000));
+  const seconds = Math.max(0, Math.floor((now - last) / 1000));
   
-  console.log(`[COLLECT] User ${ctx.from.id} (@${ctx.from.username || 'no_username'}) начал сбор яиц`);
-  
-  Object.entries(ANIMALS).forEach(([id]) => {
-    const count = ctx.user[`${id}_count`];
-    let production = 0;
-    for(let i = 0; i < count; i++) {
-      production += ANIMALS[id].baseEggs / Math.pow(1.0035, i);
-    }
-    const eggs = production * minutes;
-    console.log(`${ANIMALS[id].name}: ${count} * ${ANIMALS[id].baseEggs} * ${minutes} = ${eggs.toFixed(2)} яиц`);
-    totalEggs += eggs;
+  const resources = {
+    eggs: 0,
+    milk: 0,
+    meat: 0,
+    wool: 0,
+    feathers: 0,
+    down: 0
+  };
+
+  Object.entries(ANIMAL_CATEGORIES).forEach(([resource, category]) => {
+    category.producers.forEach(animal => {
+      const count = ctx.user[`${animal.id}_count`];
+      let production = 0;
+      
+      for(let i = 0; i < count; i++) {
+        production += animal.production;
+      }
+      
+      const amount = production * (seconds / 60); // Считаем в минутах с дробями
+      resources[resource] += amount;
+    });
   });
 
-  console.log(`[COLLECT] User ${ctx.from.id} (@${ctx.from.username || 'no_username'}) всего яиц: ${totalEggs.toFixed(2)}`);
-
-  if (totalEggs === 0) {
-    return ctx.reply('Яйца еще не созрели! Проверьте наличие животных и подождите хотя бы 1 минуту', getMainKeyboard(ctx.user));
-  }
-
-  ctx.user.eggs = parseFloat((ctx.user.eggs + totalEggs).toFixed(2));
+  // Обновляем ресурсы
+  ctx.user.eggs = parseFloat((ctx.user.eggs + resources.eggs).toFixed(2));
+  ctx.user.milk = parseFloat((ctx.user.milk + resources.milk).toFixed(2));
+  ctx.user.meat = parseFloat((ctx.user.meat + resources.meat).toFixed(2));
+  ctx.user.wool = parseFloat((ctx.user.wool + resources.wool).toFixed(2));
+  ctx.user.feathers = parseFloat((ctx.user.feathers + resources.feathers).toFixed(2));
+  ctx.user.down = parseFloat((ctx.user.down + resources.down).toFixed(2));
+  
   ctx.user.lastCollection = now;
   await ctx.user.save();
+
+  // Фильтруем и сортируем ресурсы
+  const orderedResources = Object.entries(resources)
+    .filter(([_, value]) => value > 0)
+    .sort((a, b) => Object.keys(RESOURCE_PRICES).indexOf(a[0]) - Object.keys(RESOURCE_PRICES).indexOf(b[0]));
   
-  console.log(`[COLLECT] User ${ctx.from.id} (@${ctx.from.username || 'no_username'}) собрал ${totalEggs.toFixed(2)} яиц`);
+  const resourcesList = orderedResources
+    .map(([res, value]) => {
+      const emoji = {
+        eggs: '🥚', feathers: '🪶', down: '🛌',
+        wool: '🧶', milk: '🥛', meat: '🥩'
+      }[res];
+      return `${emoji} ${getResourceName(res)}: ${value.toFixed(2)}`;
+    })
+    .join('\n');
+
   ctx.replyWithMarkdown(
-    `🥚 *Собрано яиц:* ${totalEggs.toFixed(2)}\n` +
-    `💰 *Текущее количество яиц:* ${ctx.user.eggs.toFixed(2)}\n`,
-    getMainKeyboard(ctx.user)
+    `📦 *Собрано ресурсов за ${(seconds/60).toFixed(1)} минут:*\n` +
+    (resourcesList || '⚠️ Нет новых ресурсов'),
+    Markup.inlineKeyboard([
+      Markup.button.callback('💰 Продать ресурсы', 'open_sell_menu')
+    ])
   );
 });
 
-bot.hears('💰 Продать яйца', async (ctx) => {
-  console.log(`[SELL] User ${ctx.from.id} (@${ctx.from.username || 'no_username'})`);
+bot.hears('💰 Продать ресурсы', async (ctx) => {
   ctx.replyWithMarkdown(
-    `💰 *Продажа яиц*\n` +
-    `Ваш баланс: ${ctx.user.eggs.toFixed(2)}🥚`,
+    `💰 *Выберите ресурс для продажи:*\n` +
+    `Цены за 1 ед.:\n` +
+    `🥚 Яйца: ${RESOURCE_PRICES.eggs}💰\n` +
+    `🪶 Перья: ${RESOURCE_PRICES.feathers}💰\n` +
+    `🛌 Пух: ${RESOURCE_PRICES.down}💰\n` +
+    `🧶 Шерсть: ${RESOURCE_PRICES.wool}💰\n` +
+    `🥛 Молоко: ${RESOURCE_PRICES.milk}💰\n` +
+    `🥩 Мясо: ${RESOURCE_PRICES.meat}💰`,
     Markup.inlineKeyboard([
-      Markup.button.callback('10🥚', 'sell_eggs_10'),
-      Markup.button.callback('100🥚', 'sell_eggs_100'),
-      Markup.button.callback('1000🥚', 'sell_eggs_1000'),
-      Markup.button.callback(`ВСЕ (${ctx.user.eggs.toFixed(0)})`, 'sell_eggs_all')
-    ], { columns: 2 })
+      Markup.button.callback('🥚 Яйца', 'sell_eggs'),
+      Markup.button.callback('🪶 Перья', 'sell_feathers'),
+      Markup.button.callback('🛌 Пух', 'sell_down'),
+      Markup.button.callback('🧶 Шерсть', 'sell_wool'),
+      Markup.button.callback('🥛 Молоко', 'sell_milk'),
+      Markup.button.callback('🥩 Мясо', 'sell_meat'),
+      Markup.button.callback('💥 Продать ВСЁ', 'sell_all')
+    ], { columns: 3 })
   );
 });
 
@@ -286,61 +580,31 @@ bot.action('show_leaders', async (ctx) => {
   await handleLeaders(ctx);
 });
 
-// Выносим логику помощи в отдельную функцию
-const handleHelp = (ctx) => {
-  const animalsInfo = Object.entries(ANIMALS)
-    .map(([_, data]) => 
-      `▫️ <b>${data.name}</b> - ${data.description}\n   Базовая цена: ${data.basePrice}💰`
-    )
-    .join('\n');
-  
-  return ctx.reply(
-    `<b>📚 Полное руководство по ферме</b>\n\n` +
-
-    `<b>🎮 Основные механики:</b>\n` +
-    `⏳ Яйца автоматически накапливаются со временем\n` +
-    `📈 Цены животных растут на 5% за каждое купленное\n` +
-    `📉 Продуктивность падает на 0.35% за каждое животное\n` +
-    `🔄 Можно продавать яйца по курсу 1🥚 = 0.5💰\n\n` +
-
-    `<b>📦 Производство яиц:</b>\n` +
-    `• Собирайте яйца каждые 5+ минут\n` +
-    `• Чем больше животных - тем выше доход\n` +
-    `• Формула: (базовая продуктивность) × (кол-во) × (время в минутах)\n\n` +
-
-    `<b>🏷️ Динамические цены:</b>\n` +
-    `• Цена N-го животного = базовая × 1.05^N\n` +
-    `• Пример: 10-я курица будет стоить ${Math.round(100 * Math.pow(1.05, 9))}💰\n\n` +
-
-    `<b>📊 Продуктивность:</b>\n` +
-    `• Продуктивность N-го животного = базовая / 1.0035^N\n` +
-    `• Пример: 50-я курица даёт ${(1 / Math.pow(1.0035, 49)).toFixed(2)}🥚/мин\n\n` +
-
-    `<b>🛒 Магазин животных:</b>\n${animalsInfo}\n\n` +
-
-    `<b>🔁 Система обмена:</b>\n` +
-    `• Минимальная сумма: 1💰\n` +
-    `• Используйте /trade @username сумма\n` +
-    `• Комиссия: 0%\n\n` +
-
-    `<b>🏆 Рейтинг лидеров:</b>\n` +
-    `• Обновляется в реальном времени\n` +
-    `• Топ-10 игроков по балансу\n` +
-    `• Ваша позиция отображается в профиле`,
-    { 
-      parse_mode: 'HTML',
-      reply_markup: getMainKeyboard(ctx.user).reply_markup 
-    }
-  );
-};
-
-// Обновляем обработчики
-bot.hears('❓ Помощь', handleHelp);
-
+// Обновляем обработчик помощи для отображения только производств
 bot.action('show_help', async (ctx) => {
-  console.log(`[HELP] User ${ctx.from.id} запросил справку`);
   await ctx.deleteMessage();
-  await handleHelp(ctx);
+  
+  // Формируем список всех производств
+  const productionList = Object.values(ANIMAL_CATEGORIES)
+    .map(category => {
+      const producersList = category.producers
+        .map(producer => 
+          `▫️ ${producer.name} - ${producer.description} (начальная цена: ${producer.basePrice}💰)`
+        )
+        .join('\n');
+      return `*${category.name}*\n${producersList}`;
+    })
+    .join('\n\n');
+
+  ctx.replyWithMarkdown(
+    `*🏭 Список всех производств*\n\n${productionList}\n\n` +
+    `- Цена растет на 10% за каждую покупку\n\n` +
+    `*Система обмена*\n` +
+    `Для передачи денег другому игроку:\n` +
+    `Используйте команду */trade @имя_игрока сумма*\n` +
+    `Пример: */trade @username 500*\n` +
+    `Минимальная сумма: 1💰, максимальная: 1,000,000💰`
+  );
 });
 
 bot.command('trade', async (ctx) => {
@@ -494,13 +758,13 @@ bot.command('add_animal', async (ctx) => {
   const user = await User.findByPk(userId);
   
   if (!user) return ctx.reply('Пользователь не найден');
-  if (!ANIMALS[animalId]) return ctx.reply('Неверный тип животного');
+  if (!ANIMAL_CATEGORIES[animalId]) return ctx.reply('Неверный тип животного');
   
   const field = `${animalId}_count`;
   user[field] += parseInt(count);
   await user.save();
-  ctx.reply(`✅ ${user.id} получено ${count} ${ANIMALS[animalId].name}`);
-  ctx.telegram.sendMessage(userId, `Получено ${count} ${ANIMALS[animalId].name} от Администратора\nТеперь у вас: ${user[field]}`);
+  ctx.reply(`✅ ${user.id} получено ${count} ${ANIMAL_CATEGORIES[animalId].producers.find(a => a.id === animalId)?.name}`);
+  ctx.telegram.sendMessage(userId, `Получено ${count} ${ANIMAL_CATEGORIES[animalId].producers.find(a => a.id === animalId)?.name} от Администратора\nТеперь у вас: ${user[field]}`);
 });
 
 // Команда установки денег
@@ -571,13 +835,13 @@ bot.command('set_animal', async (ctx) => {
   const user = await User.findByPk(userId);
   
   if (!user) return ctx.reply('Пользователь не найден');
-  if (!ANIMALS[animalId]) return ctx.reply('Неверный тип животного');
+  if (!ANIMAL_CATEGORIES[animalId]) return ctx.reply('Неверный тип животного');
   
   const field = `${animalId}_count`;
   user[field] = Math.max(0, parseInt(count));
   await user.save();
-  ctx.reply(`✅ Для ${user.id} установлено ${count} ${ANIMALS[animalId].name}`);
-  ctx.telegram.sendMessage(userId, `Администратор установил: ${count} ${ANIMALS[animalId].name}`);
+  ctx.reply(`✅ Для ${user.id} установлено ${count} ${ANIMAL_CATEGORIES[animalId].producers.find(a => a.id === animalId)?.name}`);
+  ctx.telegram.sendMessage(userId, `Администратор установил: ${count} ${ANIMAL_CATEGORIES[animalId].producers.find(a => a.id === animalId)?.name}`);
 });
 
 // Команда удаления животных
@@ -588,160 +852,198 @@ bot.command('delete_animal', async (ctx) => {
   const user = await User.findByPk(userId);
   
   if (!user) return ctx.reply('Пользователь не найден');
-  if (!ANIMALS[animalId]) return ctx.reply('Неверный тип животного');
+  if (!ANIMAL_CATEGORIES[animalId]) return ctx.reply('Неверный тип животного');
   
   const field = `${animalId}_count`;
   user[field] = Math.max(0, user[field] - parseInt(count));
   await user.save();
-  ctx.reply(`✅ У ${user.id} списано ${count} ${ANIMALS[animalId].name}`);
-  ctx.telegram.sendMessage(userId, `Администратор списал: ${count} ${ANIMALS[animalId].name}\nОсталось: ${user[field]}`);
+  ctx.reply(`✅ У ${user.id} списано ${count} ${ANIMAL_CATEGORIES[animalId].producers.find(a => a.id === animalId)?.name}`);
+  ctx.telegram.sendMessage(userId, `Администратор списал: ${count} ${ANIMAL_CATEGORIES[animalId].producers.find(a => a.id === animalId)?.name}\nОсталось: ${user[field]}`);
 });
 
-// Добавляем функции расчета цены и продуктивности
-const getAnimalPrice = (user, animalId, currentCount = user[`${animalId}_count`]) => {
-  const base = ANIMALS[animalId].basePrice;
-  return Math.round(base * Math.pow(1.05, currentCount));
-};
-
-const getAnimalProduction = (user, animalId) => {
-  const base = ANIMALS[animalId].baseEggs;
-  const count = user[`${animalId}_count`];
-  return base / Math.pow(1.0035, count);
-};
-
-// Добавляем обработчик выбора животного в магазине
-bot.action(/^buy_(\w+)$/, async (ctx) => {
-  const animalId = ctx.match[1];
-  const animal = ANIMALS[animalId];
+// Исправляем функции расчета цены и продуктивности
+const getAnimalPrice = (user, animalId) => {
+  const animal = Object.values(ANIMAL_CATEGORIES)
+    .flatMap(cat => cat.producers)
+    .find(a => a.id === animalId);
   
-  if (!animal) return ctx.answerCbQuery('⚠️ Животное не найдено');
+  if (!animal) return Infinity;
+  
+  const count = user[`${animalId}_count`] || 0;
+  return Math.round(animal.basePrice * Math.pow(1.10, count) * 100) / 100;
+};
 
-  const maxCount = Math.floor(ctx.user.money / getAnimalPrice(ctx.user, animalId));
-  if (maxCount < 1) {
-    return ctx.answerCbQuery('❌ Недостаточно средств');
+const getAnimalProduction = (user, producerId) => {
+  const category = Object.values(ANIMAL_CATEGORIES).find(cat => 
+    cat.producers.some(p => p.id === producerId)
+  );
+  const producer = category?.producers.find(p => p.id === producerId);
+  return producer?.production || 0;
+};
+
+// Исправляем обработчик выбора категории
+bot.action(/^buy_category_(\w+)$/, async (ctx) => {
+  const categoryId = ctx.match[1];
+  const category = ANIMAL_CATEGORIES[categoryId];
+  
+  const buttons = category.producers.map(animal => {
+    const currentPrice = getAnimalPrice(ctx.user, animal.id);
+    return Markup.button.callback(
+      `${animal.name.replace('🏭 ', '')} ~${currentPrice}💰\n${animal.description}`,
+      `buy_${animal.id}`
+    );
+  });
+  
+  ctx.editMessageText(
+    `<b>${category.name.replace('🏭 ', '')} - доступные производства:</b>\n` +
+    `Ваш баланс: ${ctx.user.money.toFixed(2)}💰`,
+    {
+      ...Markup.inlineKeyboard(buttons, { columns: 1 }),
+      parse_mode: 'HTML'
+    }
+  );
+});
+
+// Исправляем обработчик выбора количества для покупки
+bot.action(/^buy_(\w+)$/, async (ctx) => {
+  const producerId = ctx.match[1];
+  
+  // Ищем производителя во всех категориях
+  let producer;
+  for (const cat of Object.values(ANIMAL_CATEGORIES)) {
+    producer = cat.producers.find(p => p.id === producerId);
+    if (producer) break;
+  }
+  
+  if (!producer) {
+    return ctx.answerCbQuery('⚠️ Животное не найдено');
   }
 
+  // Рассчитываем максимальное количество и цены
+  let currentCount = ctx.user[`${producerId}_count`] || 0;
+  let totalPriceFor1 = 0;
+  let totalPriceFor5 = 0;
+  let totalPriceFor10 = 0;
+  let maxCount = 0;
+  let tempPrice = 0;
+  
+  // Рассчитываем цены для разных количеств
+  for (let i = 0; i < 1000; i++) {
+    const price = producer.basePrice * Math.pow(1.10, currentCount + i);
+    tempPrice += price;
+    
+    if (i < 1) totalPriceFor1 = tempPrice;
+    if (i < 5) totalPriceFor5 = tempPrice;
+    if (i < 10) totalPriceFor10 = tempPrice;
+    
+    if (ctx.user.money >= tempPrice) {
+      maxCount = i + 1;
+    } else {
+      break;
+    }
+  }
+
+  // Формируем кнопки с ценами
   const buttons = [];
   [1, 5, 10].forEach(num => {
-    if (num <= maxCount) {
-      buttons.push(Markup.button.callback(num.toString(), `buy:${animalId}:${num}`));
+    const priceIndex = {1: 0, 5: 1, 10: 2}[num];
+    const price = [totalPriceFor1, totalPriceFor5, totalPriceFor10][priceIndex];
+    
+    if (num <= maxCount && price) {
+      buttons.push(Markup.button.callback(
+        `${num} (${price.toFixed(0)}💰)`, 
+        `buy:${producerId}:${num}`
+      ));
     }
   });
   
-  if (maxCount > 1) {
-    buttons.push(Markup.button.callback(`MAX (${maxCount})`, `buy:${animalId}:${maxCount}`));
+  if (maxCount > 0) {
+    let totalMaxPrice = 0;
+    for (let i = 0; i < maxCount; i++) {
+      totalMaxPrice += producer.basePrice * Math.pow(1.10, currentCount + i);
+    }
+    buttons.push(Markup.button.callback(
+      `MAX (${maxCount}) ${totalMaxPrice.toFixed(0)}💰`, 
+      `buy:${producerId}:${maxCount}`
+    ));
   }
 
   await ctx.editMessageText(
-    `Сколько ${animal.name} хотите купить? (Макс: ${maxCount})`,
+    `Сколько ${producer.name} хотите купить?\n` +
+    `Текущее количество: ${currentCount}\n` +
+    `Цена следующего: ${(producer.basePrice * Math.pow(1.10, currentCount)).toFixed(2)}💰`,
     Markup.inlineKeyboard(buttons, { columns: 4 })
   );
 });
 
-// Обновляем обработчик выбора количества
+// Обновляем обработчик покупки с правильным расчетом
 bot.action(/^buy:(\w+):(\d+)$/, async (ctx) => {
-  const animalId = ctx.match[1];
+  const producerId = ctx.match[1];
   const count = parseInt(ctx.match[2]);
-  const animal = ANIMALS[animalId];
   
-  if (!animal || count < 1) {
+  // Ищем производителя
+  let producer;
+  for (const cat of Object.values(ANIMAL_CATEGORIES)) {
+    producer = cat.producers.find(p => p.id === producerId);
+    if (producer) break;
+  }
+  
+  if (!producer || count < 1) {
     return ctx.answerCbQuery('⚠️ Ошибка выбора');
   }
 
-  // Рассчитываем общую стоимость
+  // Рассчитываем точную стоимость
   let totalPrice = 0;
+  let currentCount = ctx.user[`${producerId}_count`] || 0;
   for(let i = 0; i < count; i++) {
-    const currentCount = ctx.user[`${animalId}_count`] + i;
-    totalPrice += getAnimalPrice(ctx.user, animalId, currentCount);
+    totalPrice += producer.basePrice * Math.pow(1.10, currentCount + i);
   }
+  totalPrice = parseFloat(totalPrice.toFixed(2));
 
   if (ctx.user.money < totalPrice) {
     return ctx.answerCbQuery('❌ Недостаточно средств');
   }
 
-  // Обновляем данные пользователя
+  // Обновляем данные
   ctx.user.money = parseFloat((ctx.user.money - totalPrice).toFixed(2));
-  ctx.user[`${animalId}_count`] += count;
+  ctx.user[`${producerId}_count`] += count;
   await ctx.user.save();
   
-  // Рассчитываем следующую цену
-  const nextPrice = getAnimalPrice(ctx.user, animalId, ctx.user[`${animalId}_count`]);
+  // Новая цена
+  const nextPrice = producer.basePrice * Math.pow(1.10, currentCount + count);
   
   ctx.editMessageText(
-    `✅ Куплено ${count} ${animal.name}\n` +
-    `💰 Общая стоимость: ${totalPrice}💰\n` +
-    `📉 Следующая цена: ${nextPrice}💰`
+    `✅ Куплено ${count} ${producer.name}\n` +
+    `💰 Общая стоимость: ${totalPrice.toFixed(2)}💰\n` +
+    `📉 Следующая цена: ${nextPrice.toFixed(2)}💰`
   );
   ctx.answerCbQuery();
 });
 
 // Добавляем обработчик кнопки "Дополнительно"
 bot.hears('🔍 Дополнительно', (ctx) => {
-  console.log(`[MENU] User ${ctx.from.id} открыл дополнительные функции`);
   ctx.reply(
     '📂 Дополнительные функции:',
     Markup.inlineKeyboard([
       Markup.button.callback('🏆 Лидеры', 'show_leaders'),
-      Markup.button.callback('❓ Помощь', 'show_help'),
-      Markup.button.callback('🎁 Ежедневный бонус', 'show_daily_bonus'),
-      Markup.button.callback('🔄 Обмен', 'show_trade_help')
+      Markup.button.callback('🎁 Ежедневный бонус', 'daily_bonus'),
+      Markup.button.callback('❓ Помощь', 'show_help')
     ], { columns: 2 })
   );
 });
 
-bot.action('show_trade_help', async (ctx) => {
-  console.log(`[TRADE_HELP] User ${ctx.from.id} запросил помощь по обмену`);
-  await ctx.deleteMessage();
-  ctx.replyWithMarkdown(
-    `*🔄 Система обмена*\n` +
-    `Ваш баланс: ${ctx.user.money.toFixed(2)}💰\n\n` +
-    `Для передачи денег другому игроку:\n` +
-    `Напишите команду */trade @имя_игрока сумма*\n` +
-    `\n` +
-    `Например: */trade @username 500*\n\n` +
-    `⚠️ *Ограничения:*\n` +
-    `- Минимальная сумма: 1💰\n`
-  );
-});
-
-// Добавляем новый обработчик для кнопок
-bot.action(/^sell_eggs_(.+)$/, async (ctx) => {
-  const amountType = ctx.match[1];
-  const user = ctx.user;
-  let eggsToSell = 0;
-
-  switch(amountType) {
-    case '10':
-      eggsToSell = 10;
-      break;
-    case '100':
-      eggsToSell = 100;
-      break;
-    case '1000':
-      eggsToSell = 1000;
-      break;
-    case 'all':
-      eggsToSell = user.eggs;
-      break;
-    default:
-      return ctx.answerCbQuery('❌ Неверный выбор');
-  }
-
-  if (eggsToSell > user.eggs) {
-    return ctx.answerCbQuery('❌ Недостаточно яиц');
-  }
-
-  const moneyEarned = eggsToSell * 0.5;
-  user.eggs -= eggsToSell;
-  user.money += moneyEarned;
-  await user.save();
-
-  ctx.editMessageText(
-    `✅ Продано ${eggsToSell.toFixed(2)}🥚 за ${moneyEarned.toFixed(2)}💰\n` +
-    `Новый баланс: ${user.eggs.toFixed(2)}🥚 | ${user.money.toFixed(2)}💰`
-  );
-  ctx.answerCbQuery();
-});
+// Обновляем функцию getResourceName
+const getResourceName = (resource) => {
+  const names = {
+    eggs: 'Яйца',
+    feathers: 'Перья',
+    down: 'Пух',
+    wool: 'Шерсть',
+    milk: 'Молоко',
+    meat: 'Мясо'
+  };
+  return names[resource] || 'ресурса';
+};
 
 // Обновляем функцию handleDailyBonus
 const handleDailyBonus = async (ctx) => {
@@ -755,14 +1057,14 @@ const handleDailyBonus = async (ctx) => {
   }
 
   const lastBonus = new Date(user.lastDailyBonus);
+  const nextBonusDate = new Date(lastBonus.getTime() + 24 * 60 * 60 * 1000);
   const hoursDiff = Math.floor((now - lastBonus) / (1000 * 60 * 60));
   
   if (hoursDiff < 24) {
-    const remaining = 24 - hoursDiff;
     await ctx.deleteMessage();
     return ctx.replyWithMarkdown(
-      `⏳ *Следующий бонус через ${remaining}ч*\n` +
-      `⌛ Последнее получение: ${lastBonus.toLocaleString('ru-RU')}`
+      `⏳ *Последнее получение:* ${lastBonus.toLocaleString('ru-RU')}\n` +
+      `⌛ *Следующий бонус:* ${nextBonusDate.toLocaleString('ru-RU')}`
     );
   }
 
@@ -776,23 +1078,51 @@ const handleDailyBonus = async (ctx) => {
   ctx.replyWithMarkdown(
     `🎉 *Ежедневный бонус!*\n` +
     `💰 Вы получили: ${bonusAmount}💰\n` +
-    `⏳ Следующий бонус: ${new Date(now.getTime() + 24 * 60 * 60 * 1000).toLocaleString('ru-RU')}\n` +
+    `⏳ Следующий бонус: ${nextBonusDate.toLocaleString('ru-RU')}\n` +
     `💵 Новый баланс: ${user.money.toFixed(2)}💰`
   );
 };
 
-// Обновляем обработчики после объявления функции
+// Перенаправляем кнопку напрямую на обработку бонуса
 bot.action('daily_bonus', handleDailyBonus);
 bot.hears('🎁 Ежедневный бонус', handleDailyBonus);
 
-// Добавляем новый обработчик для кнопки бонуса в меню
-bot.action('show_daily_bonus', async (ctx) => {
+// Обновляем команды админа
+bot.command('delete_resource', async (ctx) => {
+  const [userId, resource, amount] = ctx.message.text.split(' ').slice(1);
+  const user = await User.findByPk(userId);
+  
+  if (!RESOURCE_PRICES[resource]) {
+    return ctx.reply('❌ Неверный тип ресурса');
+  }
+  
+  user[resource] = Math.max(0, user[resource] - parseFloat(amount));
+  await user.save();
+});
+
+// Исправляем обработчик кнопки продажи ресурсов
+bot.action('open_sell_menu', async (ctx) => {
   await ctx.deleteMessage();
+  
+  // Копируем логику из основного обработчика
   ctx.replyWithMarkdown(
-    '🎁 Нажмите кнопку ниже, чтобы получить ежедневный бонус',
+    `💰 *Выберите ресурс для продажи:*\n` +
+    `Цены за 1 ед.:\n` +
+    `🥚 Яйца: ${RESOURCE_PRICES.eggs}💰\n` +
+    `🪶 Перья: ${RESOURCE_PRICES.feathers}💰\n` +
+    `🛌 Пух: ${RESOURCE_PRICES.down}💰\n` +
+    `🧶 Шерсть: ${RESOURCE_PRICES.wool}💰\n` +
+    `🥛 Молоко: ${RESOURCE_PRICES.milk}💰\n` +
+    `🥩 Мясо: ${RESOURCE_PRICES.meat}💰`,
     Markup.inlineKeyboard([
-      Markup.button.callback('🎁 Получить бонус', 'daily_bonus')
-    ])
+      Markup.button.callback('🥚 Яйца', 'sell_eggs'),
+      Markup.button.callback('🪶 Перья', 'sell_feathers'),
+      Markup.button.callback('🛌 Пух', 'sell_down'),
+      Markup.button.callback('🧶 Шерсть', 'sell_wool'),
+      Markup.button.callback('🥛 Молоко', 'sell_milk'),
+      Markup.button.callback('🥩 Мясо', 'sell_meat'),
+      Markup.button.callback('💥 Продать ВСЁ', 'sell_all')
+    ], { columns: 3 })
   );
 });
 
