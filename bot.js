@@ -23,7 +23,10 @@ const User = sequelize.define('User', {
   goose_count: { type: DataTypes.INTEGER, defaultValue: 0 },
   cow_count: { type: DataTypes.INTEGER, defaultValue: 0 },
   pig_count: { type: DataTypes.INTEGER, defaultValue: 0 },
-  sheep_count: { type: DataTypes.INTEGER, defaultValue: 0 }
+  sheep_count: { type: DataTypes.INTEGER, defaultValue: 0 },
+  lastDailyBonus: { type: DataTypes.DATE, defaultValue: null },
+}, {
+  tableName: 'Users' // Явно указываем имя таблицы
 });
 
 // Новый конфиг животных (отсортирован по стоимости)
@@ -66,14 +69,35 @@ const ANIMALS = {
   }
 };
 
+// Добавляем синхронизацию перед использованием бота
+(async () => {
+  await sequelize.sync({ force: false });
+  console.log('База данных синхронизирована');
+})();
+
 const bot = new Telegraf(process.env.TEST_BOT_TOKEN);
 
 // Создаем клавиатуру
-const gameKeyboard = Markup.keyboard([
-  ['👤 Профиль', '🛒 Купить животное'],
-  ['🥚 Собрать яйца', '💰 Продать яйца'],
-  ['🔍 Дополнительно']
-]).resize();
+const getMainKeyboard = (user) => {
+  const bonusAvailable = checkBonusAvailability(user);
+  
+  return Markup.keyboard([
+    ['👤 Профиль', '🛒 Купить животное'],
+    ['🥚 Собрать яйца', '💰 Продать яйца'],
+    bonusAvailable 
+      ? ['🎁 Ежедневный бонус', '🔍 Дополнительно']
+      : ['🔍 Дополнительно']
+  ]).resize();
+};
+
+// Добавляем функцию проверки доступности бонуса
+const checkBonusAvailability = (user) => {
+  if (!user.lastDailyBonus) return true;
+  const now = new Date();
+  const lastBonus = new Date(user.lastDailyBonus);
+  const hoursDiff = Math.floor((now - lastBonus) / (1000 * 60 * 60));
+  return hoursDiff >= 24;
+};
 
 // Инициализация сессии должна быть первой
 bot.use(async (ctx, next) => {
@@ -93,7 +117,8 @@ bot.use(async (ctx, next) => {
       id: ctx.from.id,
       username: ctx.from.username,
       firstName: ctx.from.first_name,
-      lastName: ctx.from.last_name 
+      lastName: ctx.from.last_name,
+      lastDailyBonus: null
     }
   });
   
@@ -117,7 +142,7 @@ bot.start((ctx) => {
   console.log(`[START] User ${ctx.from.id} (@${ctx.from.username || 'no_username'})`);
   ctx.replyWithMarkdown(
     `🎮 *Добро пожаловать на ферму!*\nНачальный капитал: ${ctx.user.money.toFixed(2)}💰`, 
-    gameKeyboard
+    getMainKeyboard(ctx.user)
   )
 });
 
@@ -143,7 +168,7 @@ bot.hears('👤 Профиль', async (ctx) => {
     `💰 *Деньги:* ${user.money.toFixed(2)}\n` +
     `⚡ *Общая скорость:* ${totalPerMinute.toFixed(2)} яиц/мин\n` +
     `*Животные:*\n${list}`,
-    gameKeyboard
+    getMainKeyboard(user)
   );
 });
 
@@ -186,7 +211,7 @@ bot.hears('🥚 Собрать яйца', async (ctx) => {
   console.log(`[COLLECT] User ${ctx.from.id} (@${ctx.from.username || 'no_username'}) всего яиц: ${totalEggs.toFixed(2)}`);
 
   if (totalEggs === 0) {
-    return ctx.reply('Яйца еще не созрели! Проверьте наличие животных и подождите хотя бы 1 минуту', gameKeyboard);
+    return ctx.reply('Яйца еще не созрели! Проверьте наличие животных и подождите хотя бы 1 минуту', getMainKeyboard(ctx.user));
   }
 
   ctx.user.eggs = parseFloat((ctx.user.eggs + totalEggs).toFixed(2));
@@ -197,7 +222,7 @@ bot.hears('🥚 Собрать яйца', async (ctx) => {
   ctx.replyWithMarkdown(
     `🥚 *Собрано яиц:* ${totalEggs.toFixed(2)}\n` +
     `💰 *Текущее количество яиц:* ${ctx.user.eggs.toFixed(2)}\n`,
-    gameKeyboard
+    getMainKeyboard(ctx.user)
   );
 });
 
@@ -301,7 +326,7 @@ const handleHelp = (ctx) => {
     `• Ваша позиция отображается в профиле`,
     { 
       parse_mode: 'HTML',
-      reply_markup: gameKeyboard.reply_markup 
+      reply_markup: getMainKeyboard(ctx.user).reply_markup 
     }
   );
 };
@@ -419,6 +444,11 @@ User.afterFind(user => {
   }
   if (user && !user[`sheep_count`]) {
     user[`sheep_count`] = 0;
+  }
+  if (user && user.lastDailyBonus === null) {
+    const fakeOldDate = new Date(new Date() - 25 * 60 * 60 * 1000);
+    user.lastDailyBonus = fakeOldDate;
+    user.chicken_count ||= 0;
   }
 });
 
@@ -650,6 +680,7 @@ bot.hears('🔍 Дополнительно', (ctx) => {
     Markup.inlineKeyboard([
       Markup.button.callback('🏆 Лидеры', 'show_leaders'),
       Markup.button.callback('❓ Помощь', 'show_help'),
+      Markup.button.callback('🎁 Ежедневный бонус', 'show_daily_bonus'),
       Markup.button.callback('🔄 Обмен', 'show_trade_help')
     ], { columns: 2 })
   );
@@ -709,4 +740,58 @@ bot.action(/^sell_eggs_(.+)$/, async (ctx) => {
   ctx.answerCbQuery();
 });
 
-bot.launch();
+// Обновляем функцию handleDailyBonus
+const handleDailyBonus = async (ctx) => {
+  const user = ctx.user;
+  const now = new Date();
+  
+  if (user.lastDailyBonus === null) {
+    const fakeOldDate = new Date(now.getTime() - 25 * 60 * 60 * 1000);
+    user.lastDailyBonus = fakeOldDate;
+    await user.save();
+  }
+
+  const lastBonus = new Date(user.lastDailyBonus);
+  const hoursDiff = Math.floor((now - lastBonus) / (1000 * 60 * 60));
+  
+  if (hoursDiff < 24) {
+    const remaining = 24 - hoursDiff;
+    await ctx.deleteMessage();
+    return ctx.replyWithMarkdown(
+      `⏳ *Следующий бонус через ${remaining}ч*\n` +
+      `⌛ Последнее получение: ${lastBonus.toLocaleString('ru-RU')}`
+    );
+  }
+
+  const bonusAmount = Math.floor(Math.random() * 101) + 50;
+  user.money += bonusAmount;
+  user.lastDailyBonus = now;
+  await user.save();
+
+  console.log(`[DAILY] User ${ctx.from.id} (@${ctx.from.username || 'no_username'}) получил ${bonusAmount}💰`);
+  await ctx.deleteMessage();
+  ctx.replyWithMarkdown(
+    `🎉 *Ежедневный бонус!*\n` +
+    `💰 Вы получили: ${bonusAmount}💰\n` +
+    `⏳ Следующий бонус: ${new Date(now.getTime() + 24 * 60 * 60 * 1000).toLocaleString('ru-RU')}\n` +
+    `💵 Новый баланс: ${user.money.toFixed(2)}💰`
+  );
+};
+
+// Обновляем обработчики после объявления функции
+bot.action('daily_bonus', handleDailyBonus);
+bot.hears('🎁 Ежедневный бонус', handleDailyBonus);
+
+// Добавляем новый обработчик для кнопки бонуса в меню
+bot.action('show_daily_bonus', async (ctx) => {
+  await ctx.deleteMessage();
+  ctx.replyWithMarkdown(
+    '🎁 Нажмите кнопку ниже, чтобы получить ежедневный бонус',
+    Markup.inlineKeyboard([
+      Markup.button.callback('🎁 Получить бонус', 'daily_bonus')
+    ])
+  );
+});
+
+// Добавляем синхронизацию базы данных перед запуском
+bot.launch().then(() => console.log('Бот успешно запущен'));
