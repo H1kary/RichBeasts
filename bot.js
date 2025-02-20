@@ -311,6 +311,11 @@ const RESOURCE_PRICES = {
   meat: 5.0      // Элитное мясо
 };
 
+// Добавим список всех ресурсов и категорий для справки
+const RESOURCE_TYPES = Object.keys(RESOURCE_PRICES);
+const PRODUCER_TYPES = Object.values(ANIMAL_CATEGORIES)
+  .flatMap(cat => cat.producers.map(p => p.id));
+
 // Добавляем синхронизацию перед использованием бота
 (async () => {
   await sequelize.sync({ force: false });
@@ -750,23 +755,6 @@ bot.command('add_eggs', async (ctx) => {
   ctx.telegram.sendMessage(userId, `Получено ${amount}🥚 от Администратора\nНовый баланс: ${user.eggs.toFixed(2)}🥚`);
 });
 
-// Команда добавления животных
-bot.command('add_animal', async (ctx) => {
-  if (!isAdmin(ctx)) return;
-  
-  const [userId, animalId, count] = ctx.message.text.split(' ').slice(1);
-  const user = await User.findByPk(userId);
-  
-  if (!user) return ctx.reply('Пользователь не найден');
-  if (!ANIMAL_CATEGORIES[animalId]) return ctx.reply('Неверный тип животного');
-  
-  const field = `${animalId}_count`;
-  user[field] += parseInt(count);
-  await user.save();
-  ctx.reply(`✅ ${user.id} получено ${count} ${ANIMAL_CATEGORIES[animalId].producers.find(a => a.id === animalId)?.name}`);
-  ctx.telegram.sendMessage(userId, `Получено ${count} ${ANIMAL_CATEGORIES[animalId].producers.find(a => a.id === animalId)?.name} от Администратора\nТеперь у вас: ${user[field]}`);
-});
-
 // Команда установки денег
 bot.command('set_money', async (ctx) => {
   if (!isAdmin(ctx)) return;
@@ -1087,19 +1075,6 @@ const handleDailyBonus = async (ctx) => {
 bot.action('daily_bonus', handleDailyBonus);
 bot.hears('🎁 Ежедневный бонус', handleDailyBonus);
 
-// Обновляем команды админа
-bot.command('delete_resource', async (ctx) => {
-  const [userId, resource, amount] = ctx.message.text.split(' ').slice(1);
-  const user = await User.findByPk(userId);
-  
-  if (!RESOURCE_PRICES[resource]) {
-    return ctx.reply('❌ Неверный тип ресурса');
-  }
-  
-  user[resource] = Math.max(0, user[resource] - parseFloat(amount));
-  await user.save();
-});
-
 // Исправляем обработчик кнопки продажи ресурсов
 bot.action('open_sell_menu', async (ctx) => {
   await ctx.deleteMessage();
@@ -1123,6 +1098,220 @@ bot.action('open_sell_menu', async (ctx) => {
       Markup.button.callback('🥩 Мясо', 'sell_meat'),
       Markup.button.callback('💥 Продать ВСЁ', 'sell_all')
     ], { columns: 3 })
+  );
+});
+
+// Удаляем старые команды и заменяем их универсальными
+bot.command('manage_resource', async (ctx) => {
+  if (!isAdmin(ctx)) return;
+  
+  const [action, userId, resource, amountStr] = ctx.message.text.split(' ').slice(1);
+  const amount = parseFloat(amountStr);
+  
+  if (!['add', 'set', 'delete'].includes(action)) {
+    return ctx.reply('❌ Неверное действие. Используйте: add/set/delete');
+  }
+  
+  if (!RESOURCE_TYPES.includes(resource)) {
+    return ctx.reply(`❌ Неверный ресурс. Допустимые: ${RESOURCE_TYPES.join(', ')}`);
+  }
+  
+  const user = await User.findByPk(userId);
+  if (!user) return ctx.reply('Пользователь не найден');
+  
+  switch(action) {
+    case 'add':
+      user[resource] += amount;
+      break;
+    case 'set':
+      user[resource] = amount;
+      break;
+    case 'delete':
+      user[resource] = Math.max(0, user[resource] - amount);
+      break;
+  }
+  
+  await user.save();
+  
+  ctx.reply(`✅ ${user.id} ${action} ${amount} ${resource}`);
+  ctx.telegram.sendMessage(userId, 
+    `Админ ${action === 'add' ? 'добавил' : action === 'set' ? 'установил' : 'удалил'} ` +
+    `${amount} ${getResourceName(resource)}\nНовый баланс: ${user[resource].toFixed(2)}`
+  );
+});
+
+bot.command('manage_money', async (ctx) => {
+  if (!isAdmin(ctx)) return;
+  
+  const [action, userId, amountStr] = ctx.message.text.split(' ').slice(1);
+  const amount = parseFloat(amountStr);
+  
+  if (!['add', 'set', 'delete'].includes(action)) {
+    return ctx.reply('❌ Неверное действие. Используйте: add/set/delete');
+  }
+  
+  const user = await User.findByPk(userId);
+  if (!user) return ctx.reply('Пользователь не найден');
+  
+  switch(action) {
+    case 'add':
+      user.money += amount;
+      break;
+    case 'set':
+      user.money = amount;
+      break;
+    case 'delete':
+      user.money = Math.max(0, user.money - amount);
+      break;
+  }
+  
+  await user.save();
+  
+  ctx.reply(`✅ ${user.id} ${action} ${amount}💰`);
+  ctx.telegram.sendMessage(userId, 
+    `Админ ${action === 'add' ? 'добавил' : action === 'set' ? 'установил' : 'удалил'} ` +
+    `${amount}💰\nНовый баланс: ${user.money.toFixed(2)}`
+  );
+});
+
+// Добавляем обработчик для manage_producer
+bot.command('manage_producer', async (ctx) => {
+  if (!isAdmin(ctx)) return;
+  
+  const [action, userId, producerId, amountStr] = ctx.message.text.split(' ').slice(1);
+  const amount = parseInt(amountStr);
+  
+  // Валидация параметров
+  if (!['add', 'set', 'delete'].includes(action)) {
+    return ctx.reply('❌ Неверное действие. Используйте: add/set/delete');
+  }
+  
+  if (!PRODUCER_TYPES.includes(producerId)) {
+    return ctx.reply(`❌ Неверный производитель. Допустимые:\n${PRODUCER_TYPES.join(', ')}`);
+  }
+  
+  const user = await User.findByPk(userId);
+  if (!user) return ctx.reply('❌ Пользователь не найден');
+  
+  const field = `${producerId}_count`;
+  const currentCount = user[field] || 0;
+  
+  // Выполняем действие
+  switch(action) {
+    case 'add':
+      user[field] += amount;
+      break;
+    case 'set':
+      user[field] = Math.max(0, amount);
+      break;
+    case 'delete':
+      user[field] = Math.max(0, currentCount - amount);
+      break;
+  }
+  
+  await user.save();
+  
+  // Получаем название производства
+  const producerName = Object.values(ANIMAL_CATEGORIES)
+    .flatMap(cat => cat.producers)
+    .find(p => p.id === producerId)?.name || producerId;
+  
+  // Отправляем подтверждение
+  ctx.replyWithMarkdown(
+    `✅ *${action === 'add' ? 'Добавлено' : action === 'set' ? 'Установлено' : 'Удалено'}*` +
+    `\n👤 Пользователь: ${userId}` +
+    `\n🏭 Производство: ${producerName}` +
+    `\n🛠 Действие: ${action}` +
+    `\n🔢 Количество: ${amount}` +
+    `\n📊 Текущее количество: ${user[field]}`
+  );
+  
+  // Уведомляем пользователя
+  ctx.telegram.sendMessage(
+    userId,
+    `Администратор ${action === 'add' ? 'добавил' : action === 'set' ? 'установил' : 'удалил'}` +
+    ` ${amount} ${producerName}\nТеперь у вас: ${user[field]}`,
+    { parse_mode: 'Markdown' }
+  );
+});
+
+// Добавляем команду просмотра профиля пользователя
+bot.command('user_info', async (ctx) => {
+  if (!isAdmin(ctx)) return;
+  
+  const [userId] = ctx.message.text.split(' ').slice(1);
+  if (!userId) return ctx.reply('❌ Укажите ID пользователя: /user_info [ID]');
+
+  try {
+    const user = await User.findByPk(userId);
+    if (!user) return ctx.reply('❌ Пользователь не найден');
+
+    // Формируем информацию о ресурсах на русском
+    const resources = RESOURCE_TYPES.map(res => {
+      const emoji = {
+        eggs: '🥚', feathers: '🪶', down: '🛌',
+        wool: '🧶', milk: '🥛', meat: '🥩'
+      }[res];
+      return `${emoji} ${getResourceName(res)}: ${user[res].toFixed(2)}`;
+    }).join('\n');
+
+    // Формируем информацию о производствах с правильными названиями
+    const producers = PRODUCER_TYPES.map(producerId => {
+      const count = user[`${producerId}_count`] || 0;
+      if (count === 0) return null;
+      
+      // Находим название производства
+      const producer = Object.values(ANIMAL_CATEGORIES)
+        .flatMap(cat => cat.producers)
+        .find(p => p.id === producerId);
+      
+      return producer 
+        ? `▫️ ${producer.name.replace(/_/g, '\\_')}: ${count} шт.`
+        : null;
+    }).filter(Boolean).join('\n') || 'Нет производств';
+
+    // Форматируем даты
+    const formatDate = (date) => date 
+      ? new Date(date).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })
+      : 'Никогда';
+
+    ctx.replyWithMarkdown(
+      `*👤 Полный профиль пользователя ${userId}*\n\n` +
+      `*Основные данные:*\n` +
+      `▫️ 💰 Деньги: ${user.money.toFixed(2)}\n` +
+      `▫️ 🕒 Последний сбор: ${formatDate(user.lastCollection)}\n` +
+      `▫️ 🎁 Последний бонус: ${formatDate(user.lastDailyBonus)}\n\n` +
+      `*Ресурсы:*\n${resources}\n\n` +
+      `*Производства:*\n${producers}\n\n` +
+      `*Системные данные:*\n` +
+      `▫️ Дата регистрации: ${formatDate(user.createdAt)}`,
+      { disable_web_page_preview: true }
+    );
+
+  } catch (error) {
+    console.error(`[USER_INFO_ERROR] ${error}`);
+    ctx.reply('❌ Ошибка при получении информации о пользователе');
+  }
+});
+
+// Обновляем команду помощи админа
+bot.command('admin_help', (ctx) => {
+  if (!isAdmin(ctx)) return;
+  
+  const resourcesList = RESOURCE_TYPES.map(r => `▫️ ${r} (${getResourceName(r)})`).join('\n');
+  const producersList = PRODUCER_TYPES.map(p => `▫️ \`${p}\``).join('\n');
+  
+  ctx.replyWithMarkdown(
+    `*🛠 Админ команды:*\n\n` +
+    `*Универсальные команды:*\n` +
+    `▫️ \`/manage_resource [add|set|delete] @user ресурс количество\`\n` +
+    `▫️ \`/manage_money [add|set|delete] @user количество\`\n` +
+    `▫️ \`/manage_producer [add|set|delete] @user producer_id количество\`\n\n` +
+    `*Доступные ресурсы:*\n${resourcesList}\n\n` +
+    `*Доступные производства:*\n${producersList}\n\n` +
+    `*Новые команды:*\n` +
+    `▫️ /user_info [ID] - полная информация о пользователе`,
+    { disable_web_page_preview: true }
   );
 });
 
