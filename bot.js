@@ -329,7 +329,7 @@ const getMainKeyboard = (user) => {
   const bonusAvailable = checkBonusAvailability(user);
   
   return Markup.keyboard([
-    ['�� Профиль', '🏪 Магазин'],
+    ['👤 Профиль', '🛒 Купить животное'],
     ['📦 Собрать ресурсы', '💰 Продать ресурсы'],
     bonusAvailable 
       ? ['🎁 Ежедневный бонус', '🔍 Дополнительно']
@@ -397,15 +397,9 @@ bot.use(async (ctx, next) => {
 bot.start((ctx) => {
   console.log(`[START] User ${ctx.from.id} (@${ctx.from.username || 'no_username'})`);
   ctx.replyWithMarkdown(
-    `🏡 *Главное меню*\n` +
-    `Выберите действие:`,
-    Markup.inlineKeyboard([
-      [Markup.button.callback('🏪 Магазин', 'open_shop')],
-      [Markup.button.callback('📦 Склад', 'open_storage')],
-      [Markup.button.callback('💰 Продать ресурсы', 'open_sell_menu')],
-      [Markup.button.callback('🎁 Ежедневный бонус', 'daily_bonus')]
-    ])
-  );
+    `🎮 *Добро пожаловать на ферму!*\nНачальный капитал: ${ctx.user.money.toFixed(2)}💰`, 
+    getMainKeyboard(ctx.user)
+  )
 });
 
 bot.hears('👤 Профиль', async (ctx) => {
@@ -461,20 +455,14 @@ bot.hears('👤 Профиль', async (ctx) => {
   );
 });
 
-bot.hears('🏪 Магазин', async (ctx) => {
-  await ctx.deleteMessage();
+bot.hears('🛒 Купить животное', async (ctx) => {
+  const buttons = Object.entries(ANIMAL_CATEGORIES).map(([id, category]) => 
+    Markup.button.callback(category.name, `buy_category_${id}`)
+  );
+  
   ctx.replyWithMarkdown(
-    `🏪 *Магазин производств*\n` +
-    `Выберите категорию:`,
-    Markup.inlineKeyboard([
-      [Markup.button.callback('🥚 Яйца', 'category_eggs')],
-      [Markup.button.callback('🪶 Перья', 'category_feathers')],
-      [Markup.button.callback('🛌 Пух', 'category_down')],
-      [Markup.button.callback('🧶 Шерсть', 'category_wool')],
-      [Markup.button.callback('🥛 Молоко', 'category_milk')],
-      [Markup.button.callback('🥩 Мясо', 'category_meat')],
-      [Markup.button.callback('🔙 Назад', 'back_to_main')]
-    ])
+    '🏭 *Выберите тип производства:*',
+    Markup.inlineKeyboard(buttons, { columns: 2 })
   );
 });
 
