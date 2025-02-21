@@ -523,35 +523,7 @@ bot.hears('📦 Собрать ресурсы', async (ctx) => {
 
   ctx.replyWithMarkdown(
     `📦 *Собрано ресурсов за ${(seconds/60).toFixed(1)} минут:*\n` +
-    (resourcesList || '⚠️ Нет новых ресурсов'),
-    Markup.inlineKeyboard([
-      Markup.button.callback('💰 Продать ресурсы', 'open_sell_menu')
-    ])
-  );
-});
-
-// Добавляем обработчик кнопки "Продать ресурсы"
-bot.action('open_sell_menu', async (ctx) => {
-  await ctx.deleteMessage();
-  
-  ctx.replyWithMarkdown(
-    `💰 *Выберите ресурс для продажи:*\n` +
-    `Цены за 1 ед.:\n` +
-    `🥚 Яйца: ${RESOURCE_PRICES.eggs}💰\n` +
-    `🪶 Перья: ${RESOURCE_PRICES.feathers}💰\n` +
-    `🛌 Пух: ${RESOURCE_PRICES.down}💰\n` +
-    `🧶 Шерсть: ${RESOURCE_PRICES.wool}💰\n` +
-    `🥛 Молоко: ${RESOURCE_PRICES.milk}💰\n` +
-    `🥩 Мясо: ${RESOURCE_PRICES.meat}💰`,
-    Markup.inlineKeyboard([
-      Markup.button.callback('🥚 Яйца', 'sell_eggs'),
-      Markup.button.callback('🪶 Перья', 'sell_feathers'),
-      Markup.button.callback('🛌 Пух', 'sell_down'),
-      Markup.button.callback('🧶 Шерсть', 'sell_wool'),
-      Markup.button.callback('🥛 Молоко', 'sell_milk'),
-      Markup.button.callback('🥩 Мясо', 'sell_meat'),
-      Markup.button.callback('💥 Продать ВСЁ', 'sell_all')
-    ], { columns: 3 })
+    (resourcesList || '⚠️ Нет новых ресурсов')
   );
 });
 
@@ -1205,4 +1177,27 @@ bot.command('send_message', async (ctx) => {
 bot.command('admin_help', (ctx) => {
   if (!isAdmin(ctx)) return;
   // ... остальной код команды ...
+});
+
+// Добавляем обработчик кнопки "Продать ресурсы"
+bot.hears('💰 Продать ресурсы', async (ctx) => {
+  ctx.replyWithMarkdown(
+    `💰 *Выберите ресурс для продажи:*\n` +
+    `Цены за 1 ед.:\n` +
+    `🥚 Яйца: ${RESOURCE_PRICES.eggs}💰\n` +
+    `🪶 Перья: ${RESOURCE_PRICES.feathers}💰\n` +
+    `🛌 Пух: ${RESOURCE_PRICES.down}💰\n` +
+    `🧶 Шерсть: ${RESOURCE_PRICES.wool}💰\n` +
+    `🥛 Молоко: ${RESOURCE_PRICES.milk}💰\n` +
+    `🥩 Мясо: ${RESOURCE_PRICES.meat}💰`,
+    Markup.inlineKeyboard([
+      Markup.button.callback('🥚 Яйца', 'sell_eggs'),
+      Markup.button.callback('🪶 Перья', 'sell_feathers'),
+      Markup.button.callback('🛌 Пух', 'sell_down'),
+      Markup.button.callback('🧶 Шерсть', 'sell_wool'),
+      Markup.button.callback('🥛 Молоко', 'sell_milk'),
+      Markup.button.callback('🥩 Мясо', 'sell_meat'),
+      Markup.button.callback('💥 Продать ВСЁ', 'sell_all')
+    ], { columns: 3 })
+  );
 });
