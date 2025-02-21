@@ -352,9 +352,10 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
-// Добавляем проверку прав администратора
-const ADMIN_ID = 1126975443;
-const isAdmin = (ctx) => ctx.from.id === ADMIN_ID;
+// Исправляем функцию проверки прав администратора
+const isAdmin = (ctx) => {
+  return ctx.from && ctx.from.id === 1126975443; // Фиксированный ID администратора
+};
 
 // Добавляем обработчик новых пользователей
 bot.use(async (ctx, next) => {
@@ -1174,3 +1175,34 @@ setupSellHandlers();
 
 // Добавляем синхронизацию базы данных перед запуском
 bot.launch().then(() => console.log('Бот успешно запущен'));
+
+// Добавляем проверку во все команды администратора
+bot.command('manage_resource', async (ctx) => {
+  if (!isAdmin(ctx)) return;
+  // ... остальной код команды ...
+});
+
+bot.command('manage_money', async (ctx) => {
+  if (!isAdmin(ctx)) return;
+  // ... остальной код команды ...
+});
+
+bot.command('manage_producer', async (ctx) => {
+  if (!isAdmin(ctx)) return;
+  // ... остальной код команды ...
+});
+
+bot.command('user_info', async (ctx) => {
+  if (!isAdmin(ctx)) return;
+  // ... остальной код команды ...
+});
+
+bot.command('send_message', async (ctx) => {
+  if (!isAdmin(ctx)) return;
+  // ... остальной код команды ...
+});
+
+bot.command('admin_help', (ctx) => {
+  if (!isAdmin(ctx)) return;
+  // ... остальной код команды ...
+});
