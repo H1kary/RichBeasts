@@ -1091,273 +1091,83 @@ const handleDailyBonus = async (ctx) => {
 bot.action('daily_bonus', handleDailyBonus);
 bot.hears('🎁 Ежедневный бонус', handleDailyBonus);
 
-// Исправляем обработчик кнопки продажи ресурсов
-bot.action('open_sell_menu', async (ctx) => {
-  await ctx.deleteMessage();
+// Добавляем обработчики продажи ресурсов
+const setupSellHandlers = () => {
+  const resources = ['eggs', 'feathers', 'down', 'wool', 'milk', 'meat'];
   
-  // Копируем логику из основного обработчика
-  ctx.replyWithMarkdown(
-    `💰 *Выберите ресурс для продажи:*\n` +
-    `Цены за 1 ед.:\n` +
-    `🥚 Яйца: ${RESOURCE_PRICES.eggs}💰\n` +
-    `🪶 Перья: ${RESOURCE_PRICES.feathers}💰\n` +
-    `🛌 Пух: ${RESOURCE_PRICES.down}💰\n` +
-    `🧶 Шерсть: ${RESOURCE_PRICES.wool}💰\n` +
-    `🥛 Молоко: ${RESOURCE_PRICES.milk}💰\n` +
-    `🥩 Мясо: ${RESOURCE_PRICES.meat}💰`,
-    Markup.inlineKeyboard([
-      Markup.button.callback('🥚 Яйца', 'sell_eggs'),
-      Markup.button.callback('🪶 Перья', 'sell_feathers'),
-      Markup.button.callback('🛌 Пух', 'sell_down'),
-      Markup.button.callback('🧶 Шерсть', 'sell_wool'),
-      Markup.button.callback('🥛 Молоко', 'sell_milk'),
-      Markup.button.callback('🥩 Мясо', 'sell_meat'),
-      Markup.button.callback('💥 Продать ВСЁ', 'sell_all')
-    ], { columns: 3 })
-  );
-});
+  resources.forEach(resource => {
+    bot.action(`sell_${resource}`, async (ctx) => {
+      await handleSellResource(ctx, resource, 'all');
+    });
+  });
 
-// Удаляем старые команды и заменяем их универсальными
-bot.command('manage_resource', async (ctx) => {
-  if (!isAdmin(ctx)) return;
+  bot.action('sell_all', async (ctx) => {
+    for (const res of RESOURCE_TYPES) {
+      await handleSellResource(ctx, res, 'all');
+    }
+    await ctx.answerCbQuery('✅ Все ресурсы проданы');
+  });
+};
+
+// Добавляем функцию обработки продажи
+const handleSellResource = async (ctx, resource, amount = 'all') => {
+  const user = ctx.user;
+  const price = RESOURCE_PRICES[resource];
   
-  const [action, userId, resource, amountStr] = ctx.message.text.split(' ').slice(1);
-  const amount = parseFloat(amountStr);
-  
-  if (!['add', 'set', 'delete'].includes(action)) {
-    return ctx.reply('❌ Неверное действие. Используйте: add/set/delete');
+  if (user[resource] <= 0) {
+    return ctx.answerCbQuery(`❌ Нет ${getResourceName(resource)} для продажи`);
   }
+
+  const sellAmount = amount === 'all' 
+    ? user[resource] 
+    : Math.min(amount, user[resource]);
+
+  const total = sellAmount * price;
   
-  if (!RESOURCE_TYPES.includes(resource)) {
-    return ctx.reply(`❌ Неверный ресурс. Допустимые: ${RESOURCE_TYPES.join(', ')}`);
-  }
-  
-  const user = await User.findByPk(userId);
-  if (!user) return ctx.reply('Пользователь не найден');
-  
-  switch(action) {
-    case 'add':
-      user[resource] += amount;
-      break;
-    case 'set':
-      user[resource] = amount;
-      break;
-    case 'delete':
-      user[resource] = Math.max(0, user[resource] - amount);
-      break;
-  }
+  user[resource] -= sellAmount;
+  user.money += total;
   
   await user.save();
   
-  ctx.reply(`✅ ${user.id} ${action} ${amount} ${resource}`);
-  ctx.telegram.sendMessage(userId, 
-    `Админ ${action === 'add' ? 'добавил' : action === 'set' ? 'установил' : 'удалил'} ` +
-    `${amount} ${getResourceName(resource)}\nНовый баланс: ${user[resource].toFixed(2)}`
-  );
-});
-
-bot.command('manage_money', async (ctx) => {
-  if (!isAdmin(ctx)) return;
+  ctx.answerCbQuery(`✅ Продано ${sellAmount.toFixed(2)} ${getResourceName(resource)} за ${total.toFixed(2)}💰`);
   
-  const [action, userId, amountStr] = ctx.message.text.split(' ').slice(1);
-  const amount = parseFloat(amountStr);
-  
-  if (!['add', 'set', 'delete'].includes(action)) {
-    return ctx.reply('❌ Неверное действие. Используйте: add/set/delete');
-  }
-  
-  const user = await User.findByPk(userId);
-  if (!user) return ctx.reply('Пользователь не найден');
-  
-  switch(action) {
-    case 'add':
-      user.money += amount;
-      break;
-    case 'set':
-      user.money = amount;
-      break;
-    case 'delete':
-      user.money = Math.max(0, user.money - amount);
-      break;
-  }
-  
-  await user.save();
-  
-  ctx.reply(`✅ ${user.id} ${action} ${amount}💰`);
-  ctx.telegram.sendMessage(userId, 
-    `Админ ${action === 'add' ? 'добавил' : action === 'set' ? 'установил' : 'удалил'} ` +
-    `${amount}💰\nНовый баланс: ${user.money.toFixed(2)}`
-  );
-});
-
-// Добавляем обработчик для manage_producer
-bot.command('manage_producer', async (ctx) => {
-  if (!isAdmin(ctx)) return;
-  
-  const [action, userId, producerId, amountStr] = ctx.message.text.split(' ').slice(1);
-  const amount = parseInt(amountStr);
-  
-  // Валидация параметров
-  if (!['add', 'set', 'delete'].includes(action)) {
-    return ctx.reply('❌ Неверное действие. Используйте: add/set/delete');
-  }
-  
-  if (!PRODUCER_TYPES.includes(producerId)) {
-    return ctx.reply(`❌ Неверный производитель. Допустимые:\n${PRODUCER_TYPES.join(', ')}`);
-  }
-  
-  const user = await User.findByPk(userId);
-  if (!user) return ctx.reply('❌ Пользователь не найден');
-  
-  const field = `${producerId}_count`;
-  const currentCount = user[field] || 0;
-  
-  // Фиксируем время изменения
-  const updateTime = new Date();
-  
-  // Выполняем действие
-  switch(action) {
-    case 'add':
-      user[field] += amount;
-      user.lastCollection = updateTime;
-      break;
-    case 'set':
-      user[field] = amount;
-      user.lastCollection = updateTime;
-      break;
-    case 'delete':
-      user[field] = Math.max(0, currentCount - amount);
-      user.lastCollection = updateTime;
-      break;
-  }
-  
-  await user.save();
-  
-  // Получаем название производства
-  const producerName = Object.values(ANIMAL_CATEGORIES)
-    .flatMap(cat => cat.producers)
-    .find(p => p.id === producerId)?.name || producerId;
-  
-  // Отправляем подтверждение
-  ctx.replyWithMarkdown(
-    `✅ *${action === 'add' ? 'Добавлено' : action === 'set' ? 'Установлено' : 'Удалено'}*` +
-    `\n👤 Пользователь: ${userId}` +
-    `\n🏭 Производство: ${producerName}` +
-    `\n🛠 Действие: ${action}` +
-    `\n🔢 Количество: ${amount}` +
-    `\n📊 Текущее количество: ${user[field]}`
+  // Обновляем сообщение с новыми количествами
+  const message = await ctx.editMessageText(
+    `💰 *Результат продажи:*\n` +
+    `${getResourceEmoji(resource)} ${getResourceName(resource)}: -${sellAmount.toFixed(2)}\n` +
+    `💵 Получено: ${total.toFixed(2)}💰\n\n` +
+    `🔄 Обновление интерфейса...`
   );
   
-  // Уведомляем пользователя
-  ctx.telegram.sendMessage(
-    userId,
-    `Администратор ${action === 'add' ? 'добавил' : action === 'set' ? 'установил' : 'удалил'}` +
-    ` ${amount} ${producerName}\nТеперь у вас: ${user[field]}`,
-    { parse_mode: 'Markdown' }
-  );
-});
-
-// Добавляем команду просмотра профиля пользователя
-bot.command('user_info', async (ctx) => {
-  if (!isAdmin(ctx)) return;
-  
-  const [userId] = ctx.message.text.split(' ').slice(1);
-  if (!userId) return ctx.reply('❌ Укажите ID пользователя: /user_info [ID]');
-
-  try {
-    const user = await User.findByPk(userId);
-    if (!user) return ctx.reply('❌ Пользователь не найден');
-
-    // Формируем информацию о ресурсах на русском
-    const resources = RESOURCE_TYPES.map(res => {
-      const emoji = {
-        eggs: '🥚', feathers: '🪶', down: '🛌',
-        wool: '🧶', milk: '🥛', meat: '🥩'
-      }[res];
-      return `${emoji} ${getResourceName(res)}: ${user[res].toFixed(2)}`;
-    }).join('\n');
-
-    // Формируем информацию о производствах с правильными названиями
-    const producers = PRODUCER_TYPES.map(producerId => {
-      const count = user[`${producerId}_count`] || 0;
-      if (count === 0) return null;
-      
-      // Находим название производства
-      const producer = Object.values(ANIMAL_CATEGORIES)
-        .flatMap(cat => cat.producers)
-        .find(p => p.id === producerId);
-      
-      return producer 
-        ? `▫️ ${producer.name.replace(/_/g, '\\_')}: ${count} шт.`
-        : null;
-    }).filter(Boolean).join('\n') || 'Нет производств';
-
-    // Форматируем даты
-    const formatDate = (date) => date 
-      ? new Date(date).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })
-      : 'Никогда';
-
-    ctx.replyWithMarkdown(
-      `*👤 Полный профиль пользователя ${userId}*\n\n` +
-      `*Основные данные:*\n` +
-      `▫️ 💰 Деньги: ${user.money.toFixed(2)}\n` +
-      `▫️ 🕒 Последний сбор: ${formatDate(user.lastCollection)}\n` +
-      `▫️ 🎁 Последний бонус: ${formatDate(user.lastDailyBonus)}\n\n` +
-      `*Ресурсы:*\n${resources}\n\n` +
-      `*Производства:*\n${producers}\n\n` +
-      `*Системные данные:*\n` +
-      `▫️ Дата регистрации: ${formatDate(user.createdAt)}`,
-      { disable_web_page_preview: true }
+  // Задержка для визуального подтверждения
+  setTimeout(async () => {
+    await ctx.telegram.editMessageText(
+      message.chat.id,
+      message.message_id,
+      null,
+      `💰 *Ресурсы проданы!*\n` +
+      `💵 Получено: ${total.toFixed(2)}💰\n` +
+      `📊 Новый баланс: ${user.money.toFixed(2)}💰`,
+      { parse_mode: 'Markdown' }
     );
+  }, 1000);
+};
 
-  } catch (error) {
-    console.error(`[USER_INFO_ERROR] ${error}`);
-    ctx.reply('❌ Ошибка при получении информации о пользователе');
-  }
-});
+// Добавляем вспомогательные функции
+const getResourceEmoji = (resource) => {
+  const emojis = {
+    eggs: '🥚',
+    feathers: '🪶',
+    down: '🛌',
+    wool: '🧶',
+    milk: '🥛',
+    meat: '🥩'
+  };
+  return emojis[resource] || '';
+};
 
-// Добавляем команду отправки сообщений
-bot.command('send_message', async (ctx) => {
-  if (!isAdmin(ctx)) return;
-  
-  const args = ctx.message.text.split(' ').slice(1);
-  if (args.length < 2) {
-    return ctx.reply('❌ Формат: /send_message [ID_пользователя] [текст сообщения]');
-  }
-  
-  const [userId, ...messageParts] = args;
-  const message = messageParts.join(' ');
-  
-  try {
-    await ctx.telegram.sendMessage(userId, `📨 Сообщение от администратора:\n${message}`);
-    ctx.reply(`✅ Сообщение отправлено пользователю ${userId}`);
-  } catch (error) {
-    console.error(`[SEND_MESSAGE_ERROR] ${error}`);
-    ctx.reply(`❌ Не удалось отправить сообщение пользователю ${userId}`);
-  }
-});
-
-// Обновляем команду помощи
-bot.command('admin_help', (ctx) => {
-  if (!isAdmin(ctx)) return;
-  
-  const resourcesList = RESOURCE_TYPES.map(r => `- ${r} (${getResourceName(r)})`).join('\n');
-  const producersList = PRODUCER_TYPES.map(p => `- ${p}`).join('\n');
-  
-  ctx.reply(
-    '🛠 Админ команды:\n\n' +
-    'Универсальные команды:\n' +
-    '/manage_resource [add|set|delete] @user ресурс количество\n' +
-    '/manage_money [add|set|delete] @user количество\n' +
-    '/manage_producer [add|set|delete] @user producer_id количество\n\n' +
-    'Доступные ресурсы:\n' + resourcesList + '\n\n' +
-    'Доступные производства:\n' + producersList + '\n\n' +
-    'Новые команды:\n' +
-    '/user_info [ID] - полная информация о пользователе\n' +
-    '/send_message [ID] [текст] - отправить сообщение',
-    { disable_web_page_preview: true }
-  );
-});
+// Инициализируем обработчики при старте
+setupSellHandlers();
 
 // Добавляем синхронизацию базы данных перед запуском
 bot.launch().then(() => console.log('Бот успешно запущен'));
